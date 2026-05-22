@@ -1,0 +1,67 @@
+#--------------------------数据库配置-------------------------
+
+# --------------------------数据源配置-------------------------
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/mall?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # --------------------------Redis 配置-------------------------
+  data:
+
+    redis:
+      host: localhost
+      port: 6379
+
+# --------------------------RabbitMQ 配置-------------------------
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
+        acknowledge-mode: manual
+
+
+
+
+# --------------------------服务器配置-------------------------
+server:
+  port: 8080
+
+
+# --------------------------日志配置-------------------------
+logging:
+  level:
+    root: info
+    com.mall.demo: debug
+    org.springframework.web.socket: DEBUG
+    org.springframework.messaging: DEBUG
+
+
+#--------------------------JWT配置-------------------------
+jwt:
+  secret: 3rPX7RAsq2NXd0ZKvPIh1DKbWWe72RgkBojx8WxZPNw=
+  expiration: 86400
+
+
+alipay:
+  sandbox:
+    appId: 9021000162681200
+    privateKey: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDlwhxfLm5bMX4OajuqSzMJIrK3V+gXIOOIe81QXYcWQMu93oQrGffMmmvUX5IKMLRFYOZ6W54gUF+DdKyYeRx2NVmlE+nYBBfuThcBBoRUK4bFRBVbzZRTLKiLxWyImqCw6RJquE3hmI2ffGUnZwa9xOukgHlsExoNv+U7F4XkoY5H2u8UEjqTH/xyylyRkRCDXLXBeFoas8g0slWWw/rAarLK05c5n6S1OU+aN/eW+aIEhhLZhk4F6pI3UriGrE+3LsSZWi/SeRELNqWfEOFOtCPjmgkV6uArCGU5DGBkYnbOcicDDCFlq9vchmeUCFai0tq9jSCEqI3ighxqQTDRAgMBAAECggEAWm57gk8hKo2hYwUXNODiVo8srpNQC4JrbDXmSuJ1ICIizzm85cYTzZleJbn0HkSrP79zF+flpixcW75ZjK3msPQws5PR7680yBw+W633+bUkF5LDoV2aKt6h/FmZbW8HHnquQAkIxmmoHIT2v3qCocDXSukyYYJnN9A25npMvf7FrHupq0/1Zgi8HCFLa2WQQ/ppDe+0/dBnbFhNsTt/+zvhIkwh6MPvR5eXZAGDbmbu1un0DMMy3uS/DRUn4y2uHr3afWPn546RAZoDukaKDjb6elxuXazrBqDqFj/b+PObiL1LjiPA8lOBfY1f3wDJiMsew+Dzjmg7VVY1oUSfUQKBgQD4XOdNzgds0WSqfSTmvHRcndWea7N9HyBNoSAaHNuib/8P6EoNTX/lvpfDzNMBcEziOwKt+p7tyHBvhO8RAlYZlp9ho23x1FMfiBaBFnQLQ3aG2cwaVCW8AfLjpIWXtjKigGwpGar32jLsnm3eTtE/4uehF1qzTU0ufIFMjB7PZQKBgQDs0sCtM/awmVQBdEIDJizA+0PusO/bQC34O1iSOFhW+hv6ttFPXAXxKm2DO0xVsbPA3tU7JDQV1gJRmexuy7AGOlL5c65SJQcA4ilUViyWewTWxm21VVA5jVS8xIgIPPkwzoQwCRW+8izx+KBY9GJiOpuWEz/H0o6OLSuvjJKy/QKBgQDJYuO3pilFJmEfEUybwBIGi4EM7T3kZhnWeKFEK0Q46eGDb5KkSMQ9cZc0EGDEmN/uzXS1yDOYkeABvWPwgdl49DaWgGOFJOql9b5xu9gqzfBNFku2yaazVU0zI1OkGfvi4olRpluIkCiczzY9feGUkRPK/tnv6+16lUBu5muRNQKBgE5uykNSx2vbjBfjMg2q8f2D+g6uaPHbQp5IwV/D63X65ZNWQuIenxUtMRHabMCg1uCUrFgm+F0XALOX39cd/JFDdcGKD3zDKJuhS4DT/XZlDcg39ZOtyqEU7rCKAmeAEiOY8eyaxan0uO/2oNx1K7ROpsLAY0pBsNbjnOlKDDfdAoGAe9Di49HDwisWlnod8PLmucquSLtzcOppJB6jm73Y2Jao3drpDILvPPI4Rv6pwNDxtXJBSlnNxitryfsJIHASTjeqRDOwzEvk/XMczqT+c5rQ+PWQFeUsLDMHLRVR2twwddlyBDYMcZykvljRyN3/VbCHvWjK48OXxq23O9z3krY=
+    alipayPublicKey: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAto2it+ePSagHndMbUeUsNsaO+AkFScXF9uwf+KCp3eydAshVAA5Zde1LbWtiPTxUj3f0giED648iz4kVJQmtSCcP7SGqwPOQ/nlQWX5E5xmUQ0/S7RSb8pMF87hSl44JYWxipE8tr1LtZapSwhuBi/Bidjht949bwwpyjV15ReSjcPlbznJ6vGavb5WF8Nu7oUSmCREfp/lVyxB2alRBdDEEMQHR36fhXxwZ6Eyds/26dbv5xJSRKBubrocxQjDIT6vogJQlsyC6XS0js+8JRoD3QTxUKYMNd/Ur6BVlCCTi2tsjrzeWsCk94R8fDvh6+WlGcjYuPGJTvGUQMR9TVQIDAQAB
+    gatewayUrl: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+    notifyUrl: "https://29cc939.r7.cpolar.top/api/pay/alipay/notify"  # 支付结果异步通知地址
+    returnUrl: "http://localhost:8080/pay/success" # 支付完成后页面跳转地址
+
+
+
+
