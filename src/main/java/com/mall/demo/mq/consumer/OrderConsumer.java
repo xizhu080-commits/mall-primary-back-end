@@ -1,3 +1,4 @@
+/*
 package com.mall.demo.mq.consumer;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -35,9 +36,11 @@ public class OrderConsumer {
     public void handleOrderTimeout(String orderId ) {
 
 
-        /**
+        */
+/**
          * 订单状态: 1->待付款；2->待发货；3->已发货；4->已完成；5->退款中; 6->退款成功;0->已关闭
-         */
+         *//*
+
 
 
 
@@ -90,6 +93,100 @@ public class OrderConsumer {
             for (OrderItem item : items) {
                 stockService.addStock(item.getSkuId(), item.getQuantity());
             }
+            log.info("订单 {} 实时超时处理成功，库存已回滚", orderId);
+        }
+    }
+}*/
+
+
+
+
+package com.mall.demo.mq.consumer;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.mall.demo.module.order.entity.MyOrder;
+import com.mall.demo.module.order.entity.OrderItem;
+import com.mall.demo.module.order.entity.Suborder;
+import com.mall.demo.module.order.mapper.OrderItemMapper;
+import com.mall.demo.module.order.mapper.OrderMapper;
+import com.mall.demo.module.order.mapper.SuborderMapper;
+import com.mall.demo.module.order.service.StockService;
+import com.rabbitmq.client.Channel;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class OrderConsumer {
+
+    private final OrderMapper orderMapper;
+    private final OrderItemMapper orderItemMapper;
+    private final StockService stockService;
+    private final SuborderMapper suborderMapper;
+
+    private static final long ORDER_EXPIRE_TOLERANCE = 300000L;
+    private static final long OLD_MESSAGE_THRESHOLD = 3600000L;
+
+    @RabbitListener(queues = "order.dlx.queue")
+    public void handleOrderTimeout(String orderId, Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
+        try {
+            processOrderTimeout(orderId);
+            channel.basicAck(deliveryTag, false);
+        } catch (Exception e) {
+            log.error("处理订单超时失败: {}, 错误: {}", orderId, e.getMessage(), e);
+            try {
+                channel.basicNack(deliveryTag, false, false);
+            } catch (IOException ioException) {
+                log.error("拒绝消息失败: {}", ioException.getMessage());
+            }
+        }
+    }
+
+    private void processOrderTimeout(String orderId) {
+        MyOrder myOrder = orderMapper.selectById(orderId);
+        if (myOrder == null) {
+            log.debug("订单不存在: {}", orderId);
+            return;
+        }
+
+        if (myOrder.getStatus() != 0) {
+            log.debug("订单状态不是待支付: {}, 状态: {}", orderId, myOrder.getStatus());
+            return;
+        }
+
+        if (myOrder.getExpireTime() != null) {
+            Duration duration = Duration.between(myOrder.getExpireTime(), LocalDateTime.now());
+            if (duration.toMillis() > ORDER_EXPIRE_TOLERANCE) {
+                if (duration.toMillis() > OLD_MESSAGE_THRESHOLD) {
+                    log.warn("消息过期太久，跳过处理: {}", orderId);
+                    return;
+                }
+                orderMapper.closeOrderIfUnpaid(orderId);
+                return;
+            }
+        }
+
+        log.info("[消费者中心] 检测到订单实时超时，开始处理：{}", orderId);
+
+        int result = orderMapper.closeOrderIfUnpaid(orderId);
+        if (result == 0) {
+            return;
+        }
+
+        List<OrderItem> items = orderItemMapper.selectByOrderId(orderId);
+        if (items != null && !items.isEmpty()) {
+            items.forEach(item -> stockService.addStock(item.getSkuId(), item.getQuantity()));
             log.info("订单 {} 实时超时处理成功，库存已回滚", orderId);
         }
     }

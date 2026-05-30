@@ -1,8 +1,10 @@
 package com.mall.demo.module.order.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.mall.demo.common.config.RedisConfig;
 import com.mall.demo.common.enums.ErrorCodeEnum;
 import com.mall.demo.common.exception.BizException;
+import com.mall.demo.common.redis.RedisService;
 import com.mall.demo.common.result.PageResp;
 import com.mall.demo.common.util.SecurityUtils;
 import com.mall.demo.module.coupon.dto.req.CouponUpdateReqDto;
@@ -69,131 +71,9 @@ public class OrderServiceImpl implements OrderService {
     private final PaymentMapper paymentMapper;
     private final CouponUsedRecordMapper couponUsedRecordMapper;
 
+    private final RedisService redisService;
 
 
-
-  /*  @Override
-    public OrderPreviewRespDto previewOrder(OrderPreviewReqDto dto) {
-
-
-
-
-
-        //获取用户id
-        String userId = SecurityUtils.getId();
-        if (userId == null) {
-            throw new BizException(ErrorCodeEnum.USER_NOT_EXIST.getCode(), "用户未登录或token无效");
-        }
-
-        log.info("用户id:{}", userId);
-
-        //检验商品
-        if (dto.getItems() == null || dto.getItems().isEmpty()) {
-            throw new BizException(ErrorCodeEnum.PRO_NOT_FOUND.getCode(), ErrorCodeEnum.PRO_NOT_FOUND.getMessage());
-        }
-
-        //初始化总金额为0
-        BigDecimal totalAmount = BigDecimal.ZERO;
-
-        //临时订单项
-        List<OrderItem> orderItems = new ArrayList<>();
-
-
-        //遍历订单获取订单项
-        for (OrderItemReqDto item : dto.getItems()) {
-            String skuId = item.getSkuId();
-            Integer quantity = item.getQuantity();
-            //查数据库
-            log.info("查询商品:{}", skuId);
-            SKU sku = skuMapper.selectById(skuId);
-            if (sku == null) {
-                throw new BizException(ErrorCodeEnum.PRO_NOT_FOUND.getCode(), ErrorCodeEnum.PRO_NOT_FOUND.getMessage());
-            }
-            if (sku.getStatus() != 1) {
-                throw new BizException(ErrorCodeEnum.PRO_NOT_SELL.getCode(), ErrorCodeEnum.PRO_NOT_SELL.getMessage());
-            }
-            if (sku.getStock() < quantity) {
-                throw new BizException(ErrorCodeEnum.STOCK_NOT_ENOUGH.getCode(), ErrorCodeEnum.STOCK_NOT_ENOUGH.getMessage());
-            }
-            // Deleted://扣库存
-            // Deleted:if (!stockService.deductStock(skuId, quantity)) {
-            // Deleted:    throw new BizException(ErrorCodeEnum.STOCK_NOT_ENOUGH.getCode(), ErrorCodeEnum.STOCK_NOT_ENOUGH.getMessage());
-            // Deleted:}
-            //计算金额
-            BigDecimal itemPrice = sku.getPrice().multiply(new BigDecimal(quantity));
-            totalAmount = totalAmount.add(itemPrice);
-            log.info("创建订单项:{}", item.getSkuId());
-            //创建订单项
-            OrderItem orderItem = new OrderItem();
-            orderItem.setSkuId(skuId);
-            orderItem.setQuantity(quantity);
-            orderItem.setPrice(sku.getPrice());
-            orderItem.setProductName(sku.getProductName());
-            orderItem.setProductUrl(sku.getProductUrl());
-            orderItem.setPrice(itemPrice);
-            orderItems.add(orderItem);
-        }
-        //应付金额和优惠金额计算（只调用一次，避免重复计算）
-        AmountPayableRespDto amountPayableResp = couponService.calculateAmountPayable(dto.getUsedCouponIds(), userId, totalAmount);
-        BigDecimal payableAmount = amountPayableResp.getPayableAmount();
-        BigDecimal discountAmount = amountPayableResp.getDiscountAmount();
-
-        //可用/不可用优惠卷列表（只调用一次，避免重复查询）
-        TwoCouponListsRespDto twoCouponLists = couponService.getTwoCouponLists(userId, totalAmount);
-        List<CouponRespDto> availableCoupons ;
-        List<CouponRespDto> unavailableCoupons ;
-
-        //空值赋值
-        if (twoCouponLists == null) {
-            availableCoupons = new ArrayList<>();
-            unavailableCoupons = new ArrayList<>();
-        } else {
-            availableCoupons = twoCouponLists.getAvailableCoupons() != null ? twoCouponLists.getAvailableCoupons() : new ArrayList<>();
-            unavailableCoupons = twoCouponLists.getUnavailableCoupons() != null ? twoCouponLists.getUnavailableCoupons() : new ArrayList<>();
-        }
-
-
-
-        //使用的优惠卷（当用户未选择优惠券时，使用系统推荐的优惠券）
-        List<String> usedCouponIds = dto.getUsedCouponIds();
-        if (usedCouponIds == null || usedCouponIds.isEmpty()) {
-            //使用系统推荐的优惠券
-            usedCouponIds = amountPayableResp.getCouponIds();
-        }
-
-
-
-
-
-        List<OrderItemRespDto> itemRespDtos = new ArrayList<>();
-        for (OrderItem item : orderItems) {
-            itemRespDtos.add(OrderItemRespDto.builder()
-                    .skuId(item.getSkuId())
-                    .quantity(item.getQuantity())
-                    .price(item.getPrice())
-                    .productName(item.getProductName())
-                    .productUrl(item.getProductUrl())
-                    .build());
-        }
-
-
-
-        return OrderPreviewRespDto.builder()
-                //使用的优惠卷couponId列表
-                .usedCouponIds(usedCouponIds)
-
-
-
-                .totalAmount(totalAmount)
-                .payableAmount(payableAmount)
-                .discountAmount(discountAmount)
-                .availableCoupons(availableCoupons)
-                .unavailableCoupons(unavailableCoupons)
-                .items(itemRespDtos)
-                .build();
-
-    }
-*/
 
 
 
@@ -589,6 +469,8 @@ public class OrderServiceImpl implements OrderService {
 
 
 
+
+// ... existing code ...
     /**
      * 获取订单列表
      */
@@ -596,20 +478,44 @@ public class OrderServiceImpl implements OrderService {
     public GetSuborderListRespDto getSuborderList() {
         String userId = SecurityUtils.getId();
 
-        List<Suborder> suborderList = suborderMapper.getSuborderListByUserId(userId);
+        // 缓存Key：订单列表:用户ID
+        String cacheKey = "order:suborder:list:" + userId;
 
-        // 创建响应对象
-        GetSuborderListRespDto respDto = new GetSuborderListRespDto();
+        // 使用RedisService的通用缓存方法（防穿透+防击穿+防雪崩）
+        GetSuborderListRespDto respDto = redisService.get(
+                cacheKey,
+                GetSuborderListRespDto.class,
+                (key) -> {
+                    log.info("缓存未命中，从数据库查询订单列表，userId: {}", userId);
 
-        // 设置订单列表（查不到时设置为空列表）
-        if (suborderList == null || suborderList.isEmpty()) {
-            respDto.setSuborderList(new ArrayList<>());
-        } else {
-            respDto.setSuborderList(suborderList);
-        }
+                    // 直接查询完整的订单列表（包含物流、支付信息）
+                    List<GetSuborderDetailRespDto> detailList = suborderMapper.getSuborderDetailListByUserId(userId);
 
+                    // 创建响应对象
+                    GetSuborderListRespDto dto = new GetSuborderListRespDto();
+
+                    // 设置订单列表（查不到时设置为空列表）
+                    if (detailList == null || detailList.isEmpty()) {
+                        dto.setSuborderList(new ArrayList<>());
+                    } else {
+                        dto.setSuborderList(detailList);
+                    }
+
+                    return dto;
+                },
+                30
+                // 缓存30分钟
+        );
+
+        log.info("获取子订单列表成功，userId: {}, 来源: 缓存", userId);
         return respDto;
     }
+
+
+
+
+
+
     /**
      * 获取订单详情
      */
@@ -618,66 +524,90 @@ public class OrderServiceImpl implements OrderService {
 
         String userId = SecurityUtils.getId();
 
-        //获取子订单数据
-        Suborder suborder = suborderMapper.selectById(suborderId);
-        if (suborder == null) {
-            throw new BizException(ErrorCodeEnum.ORDER_NOT_EXIST.getCode(), ErrorCodeEnum.ORDER_NOT_EXIST.getMessage());
-        }
+        // 缓存Key：订单:子订单ID:用户ID
+        String cacheKey = "order:suborder:" + suborderId + ":" + userId;
 
-        String orderId = suborder.getOrderId();
-        //获取物流数据
+        // 使用RedisService的通用缓存方法（防穿透+防击穿+防雪崩）
+        GetSuborderDetailRespDto respDto = redisService.get(
+                cacheKey,
+                GetSuborderDetailRespDto.class,
+                (key) -> {
+                    log.info("缓存未命中，从数据库查询子订单详情，suborderId: {}", suborderId);
 
-        LambdaQueryWrapper<Logistic> logisticWrapper = new LambdaQueryWrapper<>();
-        logisticWrapper.eq(Logistic::getBuyerId, userId)
-                .eq(Logistic::getOrderId, orderId)
-                .eq(Logistic::getSuborderId, suborderId);
-        Logistic logistic = logisticMapper.selectOne(logisticWrapper);
+                    //获取子订单数据
+                    Suborder suborder = suborderMapper.selectById(suborderId);
+                    if (suborder == null) {
+                        throw new BizException(ErrorCodeEnum.ORDER_NOT_EXIST.getCode(), ErrorCodeEnum.ORDER_NOT_EXIST.getMessage());
+                    }
+
+                    String orderId = suborder.getOrderId();
+                    //获取物流数据
+                    LambdaQueryWrapper<Logistic> logisticWrapper = new LambdaQueryWrapper<>();
+                    logisticWrapper.eq(Logistic::getBuyerId, userId)
+                            .eq(Logistic::getOrderId, orderId)
+                            .eq(Logistic::getSuborderId, suborderId);
+                    Logistic logistic = logisticMapper.selectOne(logisticWrapper);
 
 
-        String spuId = skuMapper.selectById(suborder.getSkuId()).getSpuId();
-        String shopLogo = shopMapper.selectById(suborder.getShopId()).getShopLogo();
+                    String spuId = skuMapper.selectById(suborder.getSkuId()).getSpuId();
+                    String shopLogo = shopMapper.selectById(suborder.getShopId()).getShopLogo();
 
-        //获取支付单数据
-        Payment payment = paymentMapper.getPaymentByIdForUpdate(orderId, userId);
-        if (payment == null) {
-            throw new BizException(ErrorCodeEnum.PAYMENT_NOT_EXIST.getCode(), ErrorCodeEnum.PAYMENT_NOT_EXIST.getMessage());
-        }
+                    //获取支付单数据
+                    Payment payment = paymentMapper.getPaymentByIdForUpdate(orderId, userId);
+                    if (payment == null) {
+                        throw new BizException(ErrorCodeEnum.PAYMENT_NOT_EXIST.getCode(), ErrorCodeEnum.PAYMENT_NOT_EXIST.getMessage());
+                    }
 
-               GetSuborderDetailRespDto respDto = new GetSuborderDetailRespDto();
-        //子订单数据
-        respDto.setSuborderId(suborderId);
-        respDto.setOrderId(orderId);
-        respDto.setMerchantId(suborder.getMerchantId());
-        respDto.setShopId(suborder.getShopId());
-        respDto.setShopName(suborder.getShopName());
-        respDto.setShopLogo(shopLogo);
-        respDto.setSpuId(spuId);
-        respDto.setSkuId(suborder.getSkuId());
-        respDto.setSpecData(suborder.getSpecData());
-        respDto.setProductName(suborder.getProductName());
-        respDto.setProductUrl(suborder.getProductUrl());
-        respDto.setPrice(suborder.getPrice());
-        respDto.setDiscountAmount(suborder.getDiscountAmount());
-        respDto.setPayAmount(suborder.getPayAmount());
-        respDto.setStatus(suborder.getStatus());
-        respDto.setRemark(suborder.getRemark());
+                    GetSuborderDetailRespDto dto = new GetSuborderDetailRespDto();
+                    //子订单数据
+                    dto.setSuborderId(suborderId);
+                    dto.setOrderId(orderId);
+                    dto.setMerchantId(suborder.getMerchantId());
+                    dto.setShopId(suborder.getShopId());
+                    dto.setShopName(suborder.getShopName());
+                    dto.setShopLogo(shopLogo);
+                    dto.setSpuId(spuId);
+                    dto.setSkuId(suborder.getSkuId());
+                    dto.setSpecData(suborder.getSpecData());
+                    dto.setProductName(suborder.getProductName());
+                    dto.setProductUrl(suborder.getProductUrl());
+                    dto.setPrice(suborder.getPrice());
+                    dto.setDiscountAmount(suborder.getDiscountAmount());
+                    dto.setPayAmount(suborder.getPayAmount());
+                    dto.setStatus(suborder.getStatus());
+                    dto.setRemark(suborder.getRemark());
 
-        //物流数据（可选，未发货时为空）
-        if (logistic != null) {
-            respDto.setLogisticId(logistic.getLogisticId());
-            respDto.setLogisticCompanyName(logistic.getLogisticCompanyName());
-            respDto.setReceiverName(logistic.getConsignee());
-            respDto.setAddress(logistic.getConsigneeAddress());
-            respDto.setSignTime(logistic.getSignTime());
-        }
+                    //物流数据（可选，未发货时为空）
+                    if (logistic != null) {
+                        dto.setLogisticId(logistic.getLogisticId());
+                        dto.setLogisticCompanyName(logistic.getLogisticCompanyName());
+                        dto.setShipperTime(logistic.getShipperTime());
+                        dto.setDeliveryTime(logistic.getDeliveryTime());
+                        dto.setSignTime(logistic.getSignTime());
+                    }
+                        // 未发货时，使用子订单中的收货信息
+                        dto.setReceiverName(suborder.getReceiverName());
+                        dto.setReceiverPhone(suborder.getReceiverPhone());
+                        dto.setAddress(suborder.getAddress());
 
-        //支付数据
-        respDto.setPayType(payment.getPayType());
-        respDto.setPaymentId(payment.getPaymentId());
-        respDto.setPayTime(payment.getPayTime());
-        respDto.setCreateTime(payment.getCreateTime());
+
+                    //支付数据
+                    dto.setPayType(payment.getPayType());
+                    dto.setPaymentId(payment.getPaymentId());
+                    dto.setPayTime(payment.getPayTime());
+                    dto.setCreateTime(payment.getCreateTime());
+
+                    return dto;
+                },
+                30  // 缓存30分钟
+        );
+
+        log.info("获取子订单详情成功，suborderId: {}, 来源: 缓存", suborderId);
+        log.info("子订单详情: {}", respDto);
         return respDto;
 
     }
+
+
 }
 

@@ -8,6 +8,7 @@ import com.mall.demo.module.messageRecord.service.UserSessionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,7 +26,7 @@ public class UserSessionController {
     /*
     * 创建会话:联系客服
     * */
-    @RequestMapping("/createSession")
+    @PostMapping("/createSession")
     public RestResp<CreateSessionRespDto> createSession(@Valid @RequestBody CreateSessionReqDto dto) {
        return RestResp.ok(userSessionService.createSession(dto));
 

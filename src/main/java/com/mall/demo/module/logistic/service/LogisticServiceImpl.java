@@ -77,6 +77,7 @@ public class LogisticServiceImpl implements LogisticService {
         // 收货信息
         logistic.setConsignee(createLogisticReqDto.getConsignee());
         logistic.setConsigneeId(createLogisticReqDto.getConsigneeId());
+        logistic.setConsigneePhone(createLogisticReqDto.getConsigneePhone());
         logistic.setConsigneeAddress(createLogisticReqDto.getConsigneeAddress());
 
         logistic.setDeliveryTime(now);
@@ -92,6 +93,8 @@ public class LogisticServiceImpl implements LogisticService {
         log.info("物流单创建成功，logisticId: {}, suborderId: {}", logistic.getLogisticId(), suborder.getSuborderId());
 
         suborder.setLogisticCompanyName(logistic.getLogisticCompanyName());
+        suborder.setUpdateTime( now);
+        suborder.setStatus(3);
         suborderMapper.updateById(suborder);
 
         // 更新子订单状态为：待收货
@@ -173,8 +176,8 @@ public class LogisticServiceImpl implements LogisticService {
             Suborder suborder = suborderMapper.selectById(logistic.getSuborderId());
             String content = buildLogisticNotifyJson(suborder, logistic, "您已签收订单");
 
-            // 更新子订单为完成
-            updateSuborderStatus(logistic.getSuborderId(), SUBORDER_COMPLETED);
+            // 更新子订单状态为已完成
+            updateSuborderStatus(suborder.getSuborderId(), 4);
             log.info("子订单状态已更新为已完成，suborderId: {}", logistic.getSuborderId());
 
             // 通知商家签收结果
@@ -221,6 +224,10 @@ public class LogisticServiceImpl implements LogisticService {
         Suborder suborder = suborderMapper.selectById(logistic.getSuborderId());
 
 
+        updateSuborderStatus(suborder.getSuborderId(), 5);
+        log.info("子订单状态已更新为已拒签，suborderId: {}", logistic.getSuborderId());
+
+        // 构建通知内容
         String content = buildLogisticNotifyJson(suborder, logistic, "您已拒签订单");
 
 
@@ -310,7 +317,7 @@ public class LogisticServiceImpl implements LogisticService {
         productJson.set("shopName", suborder.getShopName());
         productJson.set("skuId", suborder.getSkuId());
         productJson.set("productName", suborder.getProductName());
-        productJson.set("spec", suborder.getSpecData() != null ? suborder.getSpecData() : "无");
+        productJson.set("spec", suborder.getSpecData() != null ? suborder.getSpecData() : "暂无");
         productJson.set("price", suborder.getPrice());
         productJson.set("payAmount", suborder.getPayAmount());
         productJson.set("productUrl", suborder.getProductUrl());

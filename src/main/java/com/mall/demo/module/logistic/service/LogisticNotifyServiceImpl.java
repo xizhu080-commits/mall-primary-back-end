@@ -3,6 +3,7 @@ package com.mall.demo.module.logistic.service;
 import cn.hutool.core.util.IdUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mall.demo.common.config.RabbitMQConfig;
+import com.mall.demo.common.redis.RedisService;
 import com.mall.demo.module.logistic.entity.Logistic;
 import com.mall.demo.module.logistic.entity.LogisticNotifyMessage;
 import com.mall.demo.module.logistic.entity.LogisticNotifyMessageFallback;
@@ -11,6 +12,8 @@ import com.mall.demo.module.logistic.mapper.LogisticNotifyMessageMapper;
 import com.mall.demo.module.messageRecord.entity.MessageRecord;
 import com.mall.demo.module.messageRecord.mapper.MessageRecordMapper;
 import com.mall.demo.module.messageRecord.service.UserSessionService;
+import com.mall.demo.module.order.entity.Suborder;
+import com.mall.demo.module.order.mapper.SuborderMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -34,7 +37,7 @@ public class LogisticNotifyServiceImpl implements LogisticNotifyService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
     private final MessageRecordMapper messageRecordMapper;
-
+    private final SuborderMapper suborderMapper;
     // 新增 Mapper
     private final LogisticNotifyMessageMapper logisticNotifyMessageMapper;
     private final LogisticNotifyMessageFallbackMapper logisticNotifyMessageFallbackMapper;
@@ -43,7 +46,7 @@ public class LogisticNotifyServiceImpl implements LogisticNotifyService {
     private final UserSessionService userSessionService;
 
     private static final String SEPARATOR = "::";
-
+    private final RedisService redisService;
 
 
 
@@ -97,6 +100,31 @@ public class LogisticNotifyServiceImpl implements LogisticNotifyService {
 
         String action = agreed ? "AGREE" : "REJECT";
 
+        // ✅ 通过 suborderId 查询子订单获取 shopId
+        String suborderId = logistic.getSuborderId();
+        if (suborderId == null || suborderId.isEmpty()) {
+            throw new RuntimeException("物流单关联的子订单ID不能为空");
+        }
+
+        String suborderCacheKey = "suborder:" + suborderId;
+        Suborder suborder = redisService.get(
+                suborderCacheKey,
+                Suborder.class,
+                (key) -> {
+                    log.info("缓存未命中，从数据库查询子订单，suborderId: {}", suborderId);
+                    return suborderMapper.selectById(suborderId);
+                },
+                30
+        );
+
+        if (suborder == null) {
+            throw new RuntimeException("子订单不存在");
+        }
+
+        String targetShopId = suborder.getShopId();
+        if (targetShopId == null || targetShopId.isEmpty()) {
+            throw new RuntimeException("子订单关联的店铺ID不能为空");
+        }
 
 
         String notifyId = IdUtil.getSnowflakeNextIdStr();
@@ -221,41 +249,39 @@ public class LogisticNotifyServiceImpl implements LogisticNotifyService {
     /**
      * 存入消息表（MySQL - logistic_notify_message  - message_record, user_session）
      */
+    /**
+     * 存入消息表（MySQL - logistic_notify_message  - message_record, user_session）
+     */
+    /**
+     * 存入消息表（MySQL - logistic_notify_message  - message_record, user_session）
+     */
     private void saveToMessageTable(LogisticNotifyMessage message) {
         try {
             int result = logisticNotifyMessageMapper.insert(message);
 
-
-
-            String fromId  = "[SYSTEM·LOGISTIC·0002]";
-
-            String toId = "[" + message.getTargetUserId() + "]";
-
-            if (toId == null) {
+            String targetUserId = message.getTargetUserId();
+            if (targetUserId == null || targetUserId.isEmpty()) {
                 throw new IllegalArgumentException("目标用户ID不能为空");
             }
 
+            String fromId = "SYSTEM_LOGISTIC";
+            String toId = targetUserId;
 
             List<String> ids = java.util.Arrays.asList(fromId, toId);
             ids.sort(String::compareTo);
             String sessionId = ids.get(0) + SEPARATOR + ids.get(1);
 
-
-
             String systemName = "物流通知";
 
-
-
-
-            // 保存到消息记录表（message_record）
             MessageRecord messageRecordEntity = new MessageRecord();
             messageRecordEntity.setMessageRecordId(message.getNotifyId());
-            // ✅ 修正：物流通知应该标记为 "LOGISTIC"
             messageRecordEntity.setMessagePublisherType("LOGISTIC");
             messageRecordEntity.setMessagePublisherId(message.getLogisticId());
-            messageRecordEntity.setTargetUserId(message.getTargetUserId());
+            messageRecordEntity.setTargetUserId(targetUserId);
             messageRecordEntity.setTargetUserType(message.getTargetUserType());
             messageRecordEntity.setContent(message.getContent());
+            messageRecordEntity.setPushStatus(1);
+            messageRecordEntity.setRetryCount(0);
             messageRecordEntity.setIsRead(message.getIsRead());
             messageRecordEntity.setReadTime(message.getReadTime());
             messageRecordEntity.setCreateTime(message.getCreateTime());
@@ -263,12 +289,8 @@ public class LogisticNotifyServiceImpl implements LogisticNotifyService {
             messageRecordEntity.setSessionId(sessionId);
             messageRecordMapper.insert(messageRecordEntity);
 
-
-            //存入会话表:
-            //接收方ID,     发送方ID  消息内容     会话ID     对方昵称
-            userSessionService.upsertSession(message.getTargetUserId(), fromId, messageRecordEntity, sessionId, systemName,null);
-
-
+            // 只为真实用户创建会话，不创建系统侧的会话记录
+            userSessionService.updateOrCreate(targetUserId, sessionId, fromId, messageRecordEntity, systemName, null, false);
 
             if (result > 0) {
                 log.info("物流消息已存入 logistic_notify_message 表，notifyId: {}", message.getNotifyId());
@@ -278,6 +300,7 @@ public class LogisticNotifyServiceImpl implements LogisticNotifyService {
             throw new RuntimeException("保存物流消息失败", e);
         }
     }
+
 
 
 

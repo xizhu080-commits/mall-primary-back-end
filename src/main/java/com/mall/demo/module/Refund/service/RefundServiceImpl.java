@@ -15,8 +15,10 @@ import com.mall.demo.common.exception.BizException;
 import com.mall.demo.common.util.SecurityUtils;
 import com.mall.demo.module.Refund.dto.req.ApplyRefundReqDto;
 import com.mall.demo.module.Refund.dto.req.HandleRefundReqDto;
+import com.mall.demo.module.Refund.dto.req.RefundDetailReqDto;
 import com.mall.demo.module.Refund.dto.resp.ApplyRefundRespDto;
 import com.mall.demo.module.Refund.dto.resp.HandleRefundRespDto;
+import com.mall.demo.module.Refund.dto.resp.RefundDetailRespDto;
 import com.mall.demo.module.Refund.entity.Refund;
 import com.mall.demo.module.Refund.mapper.RefundMapper;
 import com.mall.demo.module.TransactionRecord.entity.TransactionRecord;
@@ -51,6 +53,69 @@ public class RefundServiceImpl implements RefundService {
      private final TransactionRecordMapper transactionRecordMapper;
 
 
+
+
+     @Override
+    public RefundDetailRespDto getRefundDetail(RefundDetailReqDto dto) {
+        String merchantId = SecurityUtils.getId();
+        String userId = dto.getUserId();
+        String orderId = dto.getOrderId();
+        String suborderId = dto.getSuborderId();
+        LambdaQueryWrapper<Refund> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Refund::getMerchantId, merchantId)
+                .eq(Refund::getUserId, userId)
+                .eq(Refund::getOrderId, orderId)
+                .eq(Refund::getSuborderId, suborderId);
+        Refund refund = refundMapper.selectOne(queryWrapper);
+        if (refund == null) {
+            throw new BizException(ErrorCodeEnum.REFUND_NOT_EXIST.getCode(), ErrorCodeEnum.REFUND_NOT_EXIST.getMessage());
+        }
+
+        Suborder suborder = suborderMapper.selectById(suborderId);
+        if (suborder == null) {
+            throw new BizException(ErrorCodeEnum.ORDER_NOT_EXIST.getCode(), ErrorCodeEnum.ORDER_NOT_EXIST.getMessage());
+        }
+
+        RefundDetailRespDto respDto = new RefundDetailRespDto();
+        respDto.setRefundId(refund.getRefundId());
+        respDto.setOrderId(refund.getOrderId());
+        respDto.setSuborderId(refund.getSuborderId());
+        respDto.setUserId(refund.getUserId());
+        respDto.setRefundAmount(refund.getRefundAmount().toString());
+        respDto.setStatus(String.valueOf(refund.getStatus()));
+        respDto.setRefundReason(refund.getRefundReason());
+
+        respDto.setProductName(suborder.getProductName());
+        respDto.setSpec(suborder.getSpecData());
+        respDto.setProductUrl(suborder.getProductUrl());
+        respDto.setReceiverPhone(suborder.getReceiverPhone());
+
+        respDto.setReceiverName(suborder.getReceiverName());
+        respDto.setAddress(suborder.getAddress());
+
+        return respDto;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ApplyRefundRespDto applyRefund(ApplyRefundReqDto dto) {
@@ -69,16 +134,16 @@ public class RefundServiceImpl implements RefundService {
 
         // 2. 状态校验拦截
         int status = suborder.getStatus();
-        if (status == 4) throw new BizException(ErrorCodeEnum.ORDER_CLOSED.getCode(), ErrorCodeEnum.ORDER_CLOSED.getMessage());
-        if (status == 0) throw new BizException(ErrorCodeEnum.ORDER_NOT_PAY.getCode(), ErrorCodeEnum.ORDER_NOT_PAY.getMessage());
+        if (status == 0) throw new BizException(ErrorCodeEnum.ORDER_CLOSED.getCode(), ErrorCodeEnum.ORDER_CLOSED.getMessage());
+        if (status == 1) throw new BizException(ErrorCodeEnum.ORDER_NOT_PAY.getCode(), ErrorCodeEnum.ORDER_NOT_PAY.getMessage());
         if (status == 5) throw new BizException(500, "订单正在退款中，请勿重复申请");
+        if (status == 6) throw new BizException(500, "订单已退款成功，请勿重复申请");
 
-        if (status == 3) {
+        if (status == 4) {
             LocalDateTime superTime = suborder.getUpdateTime().plusDays(7);
             if (superTime.isBefore(LocalDateTime.now())) {
                 throw new BizException(ErrorCodeEnum.ORDER_NOT_SUPPORT_REFUND.getCode(), "已超过7天无理由退款期");
             }
-
         }
 
         // 3. 校验店铺是否为当前用户所属店铺
@@ -112,27 +177,13 @@ public class RefundServiceImpl implements RefundService {
         refund.setRefundAmount(suborder.getPayAmount());
         refund.setStatus(0);
         refundMapper.insert(refund);
-  //  子订单      '订单状态: 1->待付款；2->待发货；3->已发货；4->待签收；5->签收成功; 6->退款中; 7->退款成功; 0->已关闭',
-        // 4. 更新子订单状态为 "退款中(5)"
-        suborder.setStatus(6);
+
+        suborder.setStatus(5);
         suborderMapper.updateById(suborder);
-
-        // 5. 特殊处理：如果是“待发货(1)”状态，无需商家审核，直接发起“秒退”
-        if (status == 1) {
-            log.info("待发货订单，触发自动退款流程，子订单号：{}", suborder.getSuborderId());
-            executeAlipayRefund(refund, suborder);
-            String title = "新的退货退款通知--用户申请退款----您无需处理!";
-            String content = buildLogisticNotifyJson(suborder, refund, title);
-
-            refundNotifyService.notifyMerchantForApply(refund,suborder,content,title);
-        }
 
         String title = "新的退货退款通知--退货退款申请!";
         String content = buildLogisticNotifyJson(suborder, refund, title);
-
-
-        // 5. 发送退款通知-->商家
-        refundNotifyService.notifyMerchantForApply(refund,suborder,content,title);
+        refundNotifyService.notifyMerchantForApply(refund, suborder, content, title);
 
 
         // 6. 构建返回对象
@@ -158,6 +209,7 @@ public class RefundServiceImpl implements RefundService {
 
         String merchantId = SecurityUtils.getId();
 
+        log.info("商家处理退款审核: {}", dto);
         Refund refund = refundMapper.selectById(dto.getRefundId());
         if (refund == null || refund.getStatus() != 0) {
             throw new BizException(500, "退款单不存在或已被处理");

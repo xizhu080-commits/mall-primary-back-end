@@ -24,12 +24,34 @@ spring:
     virtual-host: /
     listener:
       simple:
+        # 并发消费者配置 - 解决消息堆积的核心配置
+        concurrency: 5
+        # 最小并发消费者数
+        max-concurrency: 10
+        # 最大并发消费者数
+        prefetch: 10
+        # 每次预取的消息数，防止单个消费者占用过多消息
+
+        # 重试配置
         retry:
           enabled: true
           max-attempts: 3
+          # 减少重试次数，避免重复处理
           initial-interval: 1000
+          # 初始重试间隔（毫秒）
+          multiplier: 2.0
+          # 重试间隔倍增因子
+          max-interval: 10000
+          # 最大重试间隔（毫秒）
+
+        # 手动确认模式（保持不变）
         acknowledge-mode: manual
 
+        # 消费者启动超时配置
+        startup-timeout: 30000
+        # 启动超时时间
+        shutdown-timeout: 5000
+        # 关闭超时时间
 
 
 

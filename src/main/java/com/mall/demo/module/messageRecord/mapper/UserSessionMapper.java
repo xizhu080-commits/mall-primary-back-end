@@ -55,17 +55,16 @@ WHERE user_id = #{userId} AND session_id = #{sessionId}
      * 获取当前用户所有对话框
      *
      * */
-    @Select("""
-    select  *
-    from user_session
-    where user_id = #{currentUserId}
-    order by last_message_time desc
-    
-    """)
-    List<UserSession> getSessionIds(@Param("currentUserId") String currentUserId);
 
+@Select("""
+select session_id, user_id,  partner_id, partner_type, partner_name, partner_avatar, unread_count, 
+       last_message, last_message_time
+from user_session
+where user_id = #{currentUserId}
+order by last_message_time desc
 
-
+""")
+List<UserSession> getSessionIds(@Param("currentUserId") String currentUserId);
 
 
 

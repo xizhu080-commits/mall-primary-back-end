@@ -34,7 +34,7 @@ public class MessageRecordController {
                                                                @RequestParam String sessionId) {
 
 
-        log.info("==============================================前端传来的beforeId: {} ===============================================", beforeId);
+        log.info("==============================================前端传来的beforeId: {} ==== limit: {}===========================================", beforeId, limit);
 
         return RestResp.ok(messageRecordService.getMessageListBySessionId(limit, beforeId, sessionId));
     }
@@ -49,8 +49,14 @@ public class MessageRecordController {
 
     // 标记消息为已读
     @PostMapping("/markAllAsRead")
-    public RestResp<String> markAllAsRead(@RequestParam String sessionId ) {
-        messageRecordService.markAllAsRead(sessionId);
+    public RestResp<String> markAllAsRead(@RequestParam String sessionId,@RequestParam(required = false) String shopId) {
+
+        log.info("==============================================准备进入会话标记区域===============================================");
+        log.info("==============================================前端传来的sessionId: {} ===============================================", sessionId);
+
+
+
+        messageRecordService.markAllAsRead(sessionId,shopId);
         return RestResp.ok("标记成功");
     }
 

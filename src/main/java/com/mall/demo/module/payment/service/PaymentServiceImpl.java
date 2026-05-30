@@ -36,8 +36,11 @@ import com.mall.demo.module.product.entity.SKU;
 import com.mall.demo.module.product.mapper.SKUMapper;
 import com.mall.demo.module.shop.entity.Shop;
 import com.mall.demo.module.shop.mapper.ShopMapper;
+import io.lettuce.core.RedisClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +51,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -64,7 +70,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final SuborderMapper suborderMapper;
     private final ShopMapper shopMapper;
     private final PaymentNotifyMessageService paymentNotifyMessageService;
-
+    private final RedissonClient redissonClient;
 
     // 修复：对应的 YAML 路径要写全
     @Value("${alipay.sandbox.notifyUrl}")
@@ -178,180 +184,294 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
 
-    // 状态 0:未支付 1:已支付
+
+    // ========== 在 PaymentServiceImpl 中拆分 ==========
+
+    /**
+     * 主入口方法：只负责流程编排
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String processAlipayNotify(Map<String, String> params) {
-// 【新增】确认回调是否到达
-        log.info("==========================================");
-        log.info("【支付宝回调】收到通知！交易状态：{}", params.get("trade_status"));
-        log.info("==========================================");
-
+        String paymentNo = params.get("out_trade_no");
+        RLock lock = redissonClient.getLock("payment:notify:" + paymentNo);
 
         try {
-            // 1. 安全验签
-            boolean verifyResult = AlipaySignature.rsaCheckV1(
-                    params,
-                    alipayPublicKey,
-                    "UTF-8",
-                    "RSA2"
-            );
+            if (!lock.tryLock(5, 10, TimeUnit.SECONDS)) {
+                log.warn("获取锁失败，可能重复回调: {}", paymentNo);
+                return "failure";
+            }
 
-            if (!verifyResult) {
-                log.error("支付宝回调验签失败！");
+            // 1. 验签（不涉及数据库，不需要事务）
+            if (!verifyAlipaySign(params)) {
                 return "failure";
             }
 
             // 2. 检查支付状态
-            String tradeStatus = params.get("trade_status");
-            if (!"TRADE_SUCCESS".equals(tradeStatus)) {
+            if (!isTradeSuccess(params)) {
                 return "success";
             }
 
-            // 3. 获取单号
-            String paymentNo = params.get("out_trade_no");
-            Payment payment = paymentMapper.selectOne(
-                    new LambdaQueryWrapper<Payment>().eq(Payment::getPaymentId, paymentNo)
-            );
-
-
-            // 状态 0:未支付 1:已支付
-            // 4. 幂等处理
+            // 3. 幂等性检查
+            Payment payment = getAndCheckPayment(paymentNo);
             if (payment == null) {
-                log.error("支付单 {} 不存在", paymentNo);
                 return "failure";
             }
-            if (payment.getStatus() == 1) {
-
-                List<Suborder> suborderList = suborderMapper.getSuborderListByIdOrderId(payment.getOrderId());
-                for (Suborder suborder : suborderList) {
-                    String shopId = suborder.getShopId();
-                    Shop shop = shopMapper.selectById(shopId);
-                    // 通知商户---支付成功通知---请发货!
-                    paymentNotifyMessageService.notifyMerchantForShip(payment.getPaymentId(), suborder.getSuborderId(), shop.getMerchantId());
-
-
-                }
-
+            if (isAlreadyPaid(payment)) {
+                handleAlreadyPaid(payment);
                 return "success";
             }
 
-            //===============================支付成功,更新有关数据库数据=============================================
-            //==========MyOrder表,SKU表,Payment表======================================================
+            // 4. 核心业务处理（事务内）
+            processPaymentSuccess(payment, params);
 
-            // 状态 0:未支付 1:已支付
-            // 5. 更新本地支付单
-            payment.setStatus(1);
-            payment.setTradeNo(params.get("trade_no"));
-            payment.setPayTime(LocalDateTime.now());
-            // 提示：JSON.toJSONString 需要引入 Fastjson 或 Jackson，这里用 Hutool 的
-            payment.setCallbackContent(new JSONObject(params).toString());
-            paymentMapper.updateById(payment);
-            log.info("支付 {} 状态已更新为已支付(2)", payment.getOrderId());
+            // 5. 异步通知（事务外，失败不影响主流程）
+            sendAsyncNotifications(payment);
 
-
-            // 6. 更新本地订单状态
-            int orderUpdated = orderMapper.update(
-                    null,
-                    new LambdaUpdateWrapper<MyOrder>()
-                            .set(MyOrder::getStatus, 2)
-                            .set(MyOrder::getUpdateTime, LocalDateTime.now())
-                            .eq(MyOrder::getOrderId, payment.getOrderId())
-                            .eq(MyOrder::getStatus, 1)
-            );
-            StringBuilder productNameText = new StringBuilder();
-            if (orderUpdated > 0) {
-                log.info("订单 {} 状态已更新为待发货(2)", payment.getOrderId());
-
-                List<OrderItem> orderItems = orderItemMapper.selectList(
-                        new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, payment.getOrderId())
-                );
-
-                // 7. 更新SKU库存
-                for (OrderItem item : orderItems) {
-                    skuMapper.update(
-                            null,
-                            new LambdaUpdateWrapper<SKU>()
-                                    .setSql("stock = stock - " + item.getQuantity())
-                                    .eq(SKU::getSkuId, item.getSkuId())
-                                    .ge(SKU::getStock, item.getQuantity())
-                    );
-                    log.info("商品SKU {} 库存扣减 {}", item.getSkuId(), item.getQuantity());
-
-                    //获取商品名称文本
-                    if (productNameText.length() > 0) {
-                        productNameText.append(" | ");
-                    }
-                    productNameText.append(item.getProductName());
-
-                }
-            } else {
-                log.warn("订单 {} 状态更新失败或已被处理", payment.getOrderId());
-            }
-
-            // 8. 创建交易记录
-            List<Suborder> suborderList = suborderMapper.getSuborderListByIdOrderId(payment.getOrderId());
-            for (Suborder suborder : suborderList) {
-                TransactionRecord transactionRecord = new TransactionRecord();
-                transactionRecord.setUserId(payment.getUserId());
-                transactionRecord.setPayAmount(payment.getAmount());
-                transactionRecord.setTransactionStatus(1);
-                transactionRecord.setOrderId(payment.getOrderId());
-                transactionRecord.setPayTime(payment.getPayTime());
-                transactionRecord.setPayType(payment.getPayType());
-                transactionRecord.setProductNameText(productNameText.toString());
-                transactionRecord.setSuborderId(suborder.getSuborderId());
-                transactionRecord.setUpdateTime(LocalDateTime.now());
-                transactionRecord.setRemark("支付成功--交易成功");
-                transactionRecordMapper.insert(transactionRecord);
-                log.info("交易记录 {} 已创建", transactionRecord.getTransactionId());
-            }
-
-
-
-            suborderMapper.update(
-                    null,
-                    new LambdaUpdateWrapper<Suborder>()
-                            .set(Suborder::getStatus, 2)
-                            .set(Suborder::getUpdateTime, LocalDateTime.now())
-                            .eq(Suborder::getOrderId, payment.getOrderId())
-            );
-
-
-            // 9. 【新增】通过 WebSocket 实时通知买家（用户）支付成功
-            // 注意：这里需要注入 SimpMessagingTemplate 或者调用 paymentNotifyMessageService
-            // 建议在 PaymentNotifyMessageService 接口中增加一个 notifyUser 方法
-            log.info("【调试】准备进入用户通知模块...");
-            try {
-
-                log.info("【准备推送】正在向用户 {} 发送支付成功通知", payment.getUserId());
-                List<String> suborderIds = suborderList.stream()
-                        .map(Suborder::getSuborderId)
-                        .collect(java.util.stream.Collectors.toList());
-                String suborderIdJson = JSON.toJSONString(suborderIds);
-
-                String title = "新的支付通知--支付成功!";
-                String content = buildLogisticNotifyJson(suborderList, payment, title);
-
-                paymentNotifyMessageService.notifyUserForPayment(paymentNo, payment.getUserId(), payment.getOrderId(), suborderIdJson);
-                log.info("【推送成功】用户 {} 支付成功通知已发送", payment.getUserId());
-            } catch (Exception e) {
-                log.error("【推送失败】WebSocket 通知用户失败，异常信息：{}", e.getMessage(), e);
-            }
-
-
-
-            // 6. 更新业务订单状态 (此处可以调用订单服务的接口)
-            log.info("支付单 {} 客户已完成支付,处理成功！", paymentNo);
-
+            log.info("支付单 {} 处理成功", paymentNo);
             return "success";
 
         } catch (AlipayApiException e) {
             log.error("支付宝回调验签异常", e);
             return "failure";
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("获取锁被中断", e);
+            return "failure";
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
         }
     }
 
+    /**
+     * 1. 验签
+     */
+    private boolean verifyAlipaySign(Map<String, String> params) throws AlipayApiException {
+        log.info("【支付宝回调】收到通知，交易状态：{}", params.get("trade_status"));
+
+        boolean verifyResult = AlipaySignature.rsaCheckV1(
+                params, alipayPublicKey, "UTF-8", "RSA2"
+        );
+
+        if (!verifyResult) {
+            log.error("支付宝回调验签失败！");
+        }
+        return verifyResult;
+    }
+
+    /**
+     * 2. 检查是否交易成功
+     */
+    private boolean isTradeSuccess(Map<String, String> params) {
+        String tradeStatus = params.get("trade_status");
+        return "TRADE_SUCCESS".equals(tradeStatus);
+    }
+
+    /**
+     * 3. 获取并检查支付单
+     */
+    private Payment getAndCheckPayment(String paymentNo) {
+        Payment payment = paymentMapper.selectOne(
+                new LambdaQueryWrapper<Payment>().eq(Payment::getPaymentId, paymentNo)
+        );
+
+        if (payment == null) {
+            log.error("支付单 {} 不存在", paymentNo);
+        }
+        return payment;
+    }
+
+    /**
+     * 4. 检查是否已支付
+     */
+    private boolean isAlreadyPaid(Payment payment) {
+        return payment.getStatus() == 1;
+    }
+
+    /**
+     * 5. 处理已支付的情况（幂等）
+     */
+    private void handleAlreadyPaid(Payment payment) {
+        log.info("支付单 {} 已处理过，执行幂等通知", payment.getPaymentId());
+
+        List<Suborder> suborderList = suborderMapper.getSuborderListByIdOrderId(payment.getOrderId());
+        for (Suborder suborder : suborderList) {
+            Shop shop = shopMapper.selectById(suborder.getShopId());
+            paymentNotifyMessageService.notifyMerchantForShip(
+                    payment.getPaymentId(), suborder.getSuborderId(), shop.getMerchantId()
+            );
+        }
+    }
+
+    /**
+     * 6. 核心业务：支付成功处理（事务内）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void processPaymentSuccess(Payment payment, Map<String, String> params) {
+        // 6.1 更新支付单
+        updatePaymentSuccess(payment, params);
+
+        // 6.2 更新订单状态
+        boolean orderUpdated = updateOrderToPaid(payment.getOrderId());
+
+        // 6.3 扣减库存并获取商品名称
+        String productNames = deductStockAndGetProductNames(payment.getOrderId(), orderUpdated);
+
+        // 6.4 创建交易记录
+        createTransactionRecords(payment, productNames);
+
+        // 6.5 更新子订单状态
+        updateSuborderToPaid(payment.getOrderId());
+    }
+
+    /**
+     * 6.1 更新支付单为成功
+     */
+    private void updatePaymentSuccess(Payment payment, Map<String, String> params) {
+        payment.setStatus(1);
+        payment.setTradeNo(params.get("trade_no"));
+        payment.setPayTime(LocalDateTime.now());
+        payment.setCallbackContent(new JSONObject(params).toString());
+        paymentMapper.updateById(payment);
+        log.info("支付单 {} 更新成功", payment.getPaymentId());
+    }
+
+    /**
+     * 6.2 更新订单状态为待发货
+     * @return 是否更新成功
+     */
+    private boolean updateOrderToPaid(String orderId) {
+        int updated = orderMapper.update(
+                null,
+                new LambdaUpdateWrapper<MyOrder>()
+                        .set(MyOrder::getStatus, 2)
+                        .set(MyOrder::getUpdateTime, LocalDateTime.now())
+                        .eq(MyOrder::getOrderId, orderId)
+                        .eq(MyOrder::getStatus, 1)
+        );
+
+        if (updated > 0) {
+            log.info("订单 {} 状态已更新为待发货", orderId);
+            return true;
+        } else {
+            log.warn("订单 {} 状态更新失败或已被处理", orderId);
+            return false;
+        }
+    }
+
+    /**
+     * 6.3 扣减库存并返回商品名称拼接字符串
+     */
+    private String deductStockAndGetProductNames(String orderId, boolean needDeduct) {
+        StringBuilder productNameText = new StringBuilder();
+
+        if (!needDeduct) {
+            return productNameText.toString();
+        }
+
+        List<OrderItem> orderItems = orderItemMapper.selectList(
+                new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, orderId)
+        );
+
+        for (OrderItem item : orderItems) {
+            // 扣减库存
+            int updated = skuMapper.update(
+                    null,
+                    new LambdaUpdateWrapper<SKU>()
+                            .setSql("stock = stock - " + item.getQuantity())
+                            .eq(SKU::getSkuId, item.getSkuId())
+                            .ge(SKU::getStock, item.getQuantity())
+            );
+
+            if (updated == 0) {
+                log.warn("SKU {} 库存扣减失败，可能库存不足", item.getSkuId());
+                throw new BizException(ErrorCodeEnum.STOCK_NOT_ENOUGH.getCode(),
+                        "商品 " + item.getProductName() + " 库存不足");
+            }
+
+            log.info("SKU {} 库存扣减 {}", item.getSkuId(), item.getQuantity());
+
+            // 拼接商品名称
+            if (productNameText.length() > 0) {
+                productNameText.append(" | ");
+            }
+            productNameText.append(item.getProductName());
+        }
+
+        return productNameText.toString();
+    }
+
+    /**
+     * 6.4 创建交易记录
+     */
+    private void createTransactionRecords(Payment payment, String productNames) {
+        List<Suborder> suborderList = suborderMapper.getSuborderListByIdOrderId(payment.getOrderId());
+
+        for (Suborder suborder : suborderList) {
+            TransactionRecord transactionRecord = new TransactionRecord();
+            transactionRecord.setUserId(payment.getUserId());
+            transactionRecord.setPayAmount(payment.getAmount());
+            transactionRecord.setTransactionStatus(1);
+            transactionRecord.setOrderId(payment.getOrderId());
+            transactionRecord.setPayTime(payment.getPayTime());
+            transactionRecord.setPayType(payment.getPayType());
+            transactionRecord.setProductNameText(productNames);
+            transactionRecord.setSuborderId(suborder.getSuborderId());
+            transactionRecord.setUpdateTime(LocalDateTime.now());
+            transactionRecord.setRemark("支付成功--交易成功");
+            transactionRecordMapper.insert(transactionRecord);
+
+            log.info("交易记录 {} 已创建", transactionRecord.getTransactionId());
+        }
+    }
+
+    /**
+     * 6.5 更新子订单状态为待发货
+     */
+    private void updateSuborderToPaid(String orderId) {
+        suborderMapper.update(
+                null,
+                new LambdaUpdateWrapper<Suborder>()
+                        .set(Suborder::getStatus, 2)
+                        .set(Suborder::getUpdateTime, LocalDateTime.now())
+                        .eq(Suborder::getOrderId, orderId)
+        );
+        log.info("订单 {} 下的所有子订单状态已更新为待发货", orderId);
+    }
+
+    /**
+     * 7. 异步通知（事务外执行，失败不影响主流程）
+     */
+    private void sendAsyncNotifications(Payment payment) {
+        // 使用线程池异步执行，避免通知失败导致主流程回滚
+        CompletableFuture.runAsync(() -> {
+            try {
+                // 7.1 通知商户发货
+                List<Suborder> suborderList = suborderMapper.getSuborderListByIdOrderId(payment.getOrderId());
+                for (Suborder suborder : suborderList) {
+                    Shop shop = shopMapper.selectById(suborder.getShopId());
+                    paymentNotifyMessageService.notifyMerchantForShip(
+                            payment.getPaymentId(), suborder.getSuborderId(), shop.getMerchantId()
+                    );
+                }
+
+                // 7.2 WebSocket 通知用户
+                List<String> suborderIds = suborderList.stream()
+                        .map(Suborder::getSuborderId)
+                        .collect(Collectors.toList());
+                String suborderIdJson = JSON.toJSONString(suborderIds);
+                paymentNotifyMessageService.notifyUserForPayment(
+                        payment.getPaymentId(), payment.getUserId(), payment.getOrderId(), suborderIdJson
+                );
+
+                log.info("异步通知发送成功，订单：{}", payment.getOrderId());
+            } catch (Exception e) {
+                log.error("异步通知发送失败，订单：{}，错误：{}", payment.getOrderId(), e.getMessage(), e);
+            }
+        });
+    }
 
     /**
      * 将二维码链接转换为 Base64 图片格式
@@ -451,6 +571,44 @@ public class PaymentServiceImpl implements PaymentService {
 
         return contentJson.toString();
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

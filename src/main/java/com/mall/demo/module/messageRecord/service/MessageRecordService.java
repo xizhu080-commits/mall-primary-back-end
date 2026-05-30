@@ -4,13 +4,14 @@ package com.mall.demo.module.messageRecord.service;
 import com.mall.demo.module.messageRecord.dto.req.SendMessageReqDto;
 import com.mall.demo.module.messageRecord.entity.MessageRecord;
 import com.mall.demo.module.messageRecord.entity.UserSession;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 
 import java.util.List;
 
 public interface MessageRecordService {
 
     // 读取消息
-  void markAllAsRead(String sessionId);
+  void markAllAsRead(String sessionId, String shopId );
 
   // 返回当前用户指定对话框消息列表
     List<MessageRecord> getMessageListBySessionId(int limit, String beforeId, String sessionId);

@@ -73,9 +73,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                             // ✅ 新增：获取 shopId（商家发送消息时使用）
                             String shopId = ((ServletServerHttpRequest) request)
                                     .getServletRequest().getParameter("shopId");
-                            if (shopId != null) {
+                            if (shopId != null && !shopId.isEmpty()) {
                                 attributes.put("shopId", shopId);
-
+                                log.info("✅ WebSocket 握手成功，绑定商家: {}", shopId);
+                                SecurityUtils.setCurrentShopId(shopId);
                             }
                         }
 
@@ -94,7 +95,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     protected Principal determineUser(ServerHttpRequest request, WebSocketHandler wsHandler, Map<String, Object> attributes) {
                         String userId = (String) attributes.get("userId");
                         if (userId != null) {
-                            log.info("设置 Principal: {}", userId);
+                            log.info("🔔 设置 Principal: {}, 完整路径将是: /user/{}/queue/xxx", userId, userId);
                             return () -> userId;
                         }
                         return null;
@@ -152,28 +153,36 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     if (token != null && token.startsWith("Bearer ")) {
 
                         token = token.substring(7);
-                        // 2. 解析JWT
-                        String userId = jwtUtils.getIdFromToken(token);
+                        // 2. 获取前端传入的 userId（可能是 shopId 用于商家）
+                        String passedUserId = (String) accessor.getSessionAttributes().get("userId");
 
-                        log.info("userId : {}", userId);
+                        // 3. 从 JWT 解析用户ID
+                        String jwtUserId = jwtUtils.getIdFromToken(token);
 
-                        // 3. 绑定Principal
+                        // 4. 优先使用前端传入的 userId（商家场景用 shopId），否则用 JWT 解析的值
+                        String finalUserId = (passedUserId != null && !passedUserId.isEmpty()) ? passedUserId : jwtUserId;
+
+                        log.info("userId (JWT): {}, userId (passed): {}, final: {}", jwtUserId, passedUserId, finalUserId);
+
+                        // 5. 绑定Principal（使用最终确定的 userId）
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(
-                                        userId,
+                                        finalUserId,
                                         null,
                                         Collections.emptyList()
                                 );
 
                         accessor.setUser(authentication);
 
-                        log.info("WebSocket用户绑定成功，userId: {}, token: {}", userId, token);
+                        log.info("WebSocket用户绑定成功，userId: {}, token: {}", finalUserId, token);
 
-                        // ✅ 新增：从握手属性中获取 shopId 并设置到 SecurityContext
+                        // ✅ 从握手属性中获取 shopId 并设置到 SecurityContext
                         String shopId = (String) accessor.getSessionAttributes().get("shopId");
                         if (shopId != null) {
                             SecurityUtils.setCurrentShopId(shopId);
-                            log.info("✅ 设置当前店铺ID: {}", shopId);
+                            String currentShopId = SecurityUtils.getCurrentShopId();
+                            log.info("✅ WebSocket设置设置当前店铺ID: {}", currentShopId);
+
                         }
                     }
                 }

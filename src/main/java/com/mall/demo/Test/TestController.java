@@ -61,7 +61,7 @@ public class TestController {
     @GetMapping("/payment/merchant")
     @Operation(summary = "测试发货通知（商家端）", description = "模拟用户支付成功后，向商家推送发货通知")
     public RestResp<String> testPaymentToMerchant(
-            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049420760040607746") String merchantId,
+            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049429302554521601") String merchantId,
             @Parameter(description = "支付单ID") @RequestParam(defaultValue = "TEST_PAYMENT_002") String paymentId,
             @Parameter(description = "子订单ID") @RequestParam(defaultValue = "TEST_SUBORDER_001") String suborderId
     ) {
@@ -70,7 +70,7 @@ public class TestController {
         log.info("商家ID: {}, 支付单ID: {}, 子订单ID: {}", merchantId, paymentId, suborderId);
 
         try {
-            paymentNotifyMessageService.testPushToUser(merchantId);
+            paymentNotifyMessageService.testPushToUser("2049429302554521601");
             return RestResp.ok("✅ 发货通知推送成功");
         } catch (Exception e) {
             log.error("❌ 发货通知推送失败", e);
@@ -83,7 +83,7 @@ public class TestController {
     @GetMapping("/refund/apply")
     @Operation(summary = "测试退款申请通知（商家端）", description = "模拟用户申请退款后，向商家推送退款申请通知")
     public RestResp<String> testRefundApply(
-            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049420760040607746") String merchantId,
+            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049429302554521601") String merchantId,
             @Parameter(description = "用户ID") @RequestParam(defaultValue = "12345671") String userId,
             @Parameter(description = "退款金额") @RequestParam(defaultValue = "99.00") BigDecimal refundAmount,
             @Parameter(description = "退款原因") @RequestParam(defaultValue = "商品质量问题") String refundReason) {
@@ -202,7 +202,7 @@ public class TestController {
     @GetMapping("/logistic/merchant/agree")
     @Operation(summary = "测试用户签收确认通知（商家端-同意）", description = "模拟用户确认签收后，向商家推送通知")
     public RestResp<String> testLogisticMerchantAgree(
-            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049420760040607746") String merchantId,
+            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049429302554521601") String merchantId,
             @Parameter(description = "快递单号") @RequestParam(defaultValue = "SF1234567890") String trackingNumber) {
 
         log.info("========== 测试用户签收确认通知（商家端） ==========");
@@ -231,7 +231,7 @@ public class TestController {
     @GetMapping("/logistic/merchant/reject")
     @Operation(summary = "测试用户拒签通知（商家端-拒绝）", description = "模拟用户拒签包裹后，向商家推送通知")
     public RestResp<String> testLogisticMerchantReject(
-            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049420760040607746") String merchantId,
+            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049429302554521601") String merchantId,
             @Parameter(description = "快递单号") @RequestParam(defaultValue = "SF1234567891") String trackingNumber,
             @Parameter(description = "拒签原因") @RequestParam(defaultValue = "包裹外包装破损") String rejectReason) {
 
@@ -322,7 +322,7 @@ public class TestController {
     @GetMapping("/customer/to-merchant")
     @Operation(summary = "测试客服消息推送（商家端）", description = "模拟客服向商家发送消息")
     public RestResp<String> testCustomerMessageToMerchant(
-            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049420760040607746") String merchantId,
+            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049429302554521601") String merchantId,
             @Parameter(description = "消息内容") @RequestParam(defaultValue = "平台客服通知：您的店铺有新的订单需要处理，请及时查看。") String content) {
 
         log.info("========== 测试客服消息推送（商家端） ==========");
@@ -355,7 +355,7 @@ public class TestController {
     @Operation(summary = "批量测试所有类型消息", description = "一次性测试所有类型的消息推送")
     public RestResp<String> testAllTypes(
             @Parameter(description = "用户ID") @RequestParam(defaultValue = "2049420760040607746") String userId,
-            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049420760040607746") String merchantId) {
+            @Parameter(description = "商家ID") @RequestParam(defaultValue = "2049429302554521601") String merchantId) {
 
         log.info("========== 开始批量测试所有类型消息 ==========");
 

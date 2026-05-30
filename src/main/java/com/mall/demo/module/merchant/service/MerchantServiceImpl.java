@@ -336,16 +336,41 @@ public final class MerchantServiceImpl implements MerchantService {
         log.info("用户{}登陆成功", dto.getPhone());
 
 
-//       生成token
-        log.info("【用户中心】开始生成token...");
+        // ... existing code ...
+        // 3. 删除该商户的旧 token（实现单点登录）
+        String oldTokenKey = "merchantToken:" + merchant.getMerchantId();
+        String oldToken = stringRedisTemplate.opsForValue().get(oldTokenKey);
+        if (oldToken != null) {
+            // 删除旧的 token -> merchantId 映射
+            stringRedisTemplate.delete("token:" + oldToken);
+            log.info("【缓存中心】删除商户 {} 的旧 token", merchant.getMerchantId());
+        }
+
+        // 生成token
+        log.info("【商户中心】开始生成token...");
         String token = jwtUtils.generateToken(merchantId, "MERCHANT");
+
         // 6. 存 Redis（token）
+        // 存储 merchantToken:{merchantId} -> token 映射（用于单点登录）
+        stringRedisTemplate.opsForValue().set(
+                "merchantToken:" + merchant.getMerchantId(),
+                token,
+                7,
+                TimeUnit.DAYS
+        );
+
+        // 存储 token:{token} -> merchantId 映射（用于验证）
         stringRedisTemplate.opsForValue().set(
                 "token:" + token,
                 merchantId,
                 7,
                 TimeUnit.DAYS
         );
+// ... existing code ...
+
+
+
+
         log.info("【用户中心】生成token成功:{}", token);
         log.info("【缓存中心】存储用户信息...");
         redisService.set("merchant:" + merchantId, JSON.toJSONString(merchant), 10);

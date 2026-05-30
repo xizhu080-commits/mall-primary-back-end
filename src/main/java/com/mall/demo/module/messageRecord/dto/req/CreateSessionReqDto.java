@@ -8,6 +8,8 @@ import lombok.Data;
 public class CreateSessionReqDto {
 
 
+
+
     @NotBlank(message = "对方ID不能为空")
     private String partnerId;
 
@@ -19,6 +21,12 @@ public class CreateSessionReqDto {
 
     @NotBlank(message = "对方类型不能为空")
     private String partnerType;
+
+    /**
+     * 商家ID（可选，仅在商家联系用户时需要）
+     */
+    private String shopId;
+
 
 
 }

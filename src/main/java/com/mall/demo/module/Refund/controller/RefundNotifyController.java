@@ -1,63 +1,79 @@
 package com.mall.demo.module.Refund.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mall.demo.common.result.RestResp;
-import com.mall.demo.common.util.SecurityUtils;
-import com.mall.demo.module.Refund.entity.RefundNotifyMessage;
+import com.mall.demo.module.Refund.entity.Refund;
+import com.mall.demo.module.Refund.mapper.RefundMapper;
+import com.mall.demo.module.Refund.service.RefundNotifyService;
+import com.mall.demo.module.order.entity.Suborder;
+import com.mall.demo.module.order.mapper.SuborderMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.stream.Collectors;
+import jakarta.validation.constraints.NotBlank;
 
 @RestController
 @RequestMapping("/api/refund/notify")
 @RequiredArgsConstructor
+@Slf4j
 public class RefundNotifyController {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final ObjectMapper objectMapper;
+    private final RefundNotifyService refundNotifyService;
+    private final RefundMapper refundMapper;
+    private final SuborderMapper suborderMapper;
 
     /**
-     * 获取退款通知列表
-     * @param type 身份类型：MERCHANT(商家) 或 USER(用户)
+     * 用户申请退款 → 通知商家
      */
-    @GetMapping("/list")
-    public RestResp<List<RefundNotifyMessage>> list(@RequestParam String type) {
-        String userId = SecurityUtils.getId();
-        // 修正之前提到的 %d 占位符问题，这里统一使用 %s
-        String key = String.format("notify:%s:%s:list", type.toLowerCase(), userId);
+    @PostMapping("/applyRefund")
+    public RestResp<Void> notifyMerchantForApply(
+            @RequestParam @NotBlank(message = "退款单ID不能为空") String refundId) {
 
-        // 获取 Redis 中的最近通知（List结构）
-        List<Object> rawList = redisTemplate.opsForList().range(key, 0, -1);
-
-        if (rawList == null || rawList.isEmpty()) {
-            return RestResp.ok();
+        // ✅ 从数据库查询退款单和子订单
+        Refund refund = refundMapper.selectById(refundId);
+        if (refund == null) {
+            return RestResp.fail(400, "退款单不存在");
         }
 
-        // 将 JSON 字符串转换回对象
-        List<RefundNotifyMessage> messages = rawList.stream()
-                .map(obj -> {
-                    try {
-                        return objectMapper.readValue(obj.toString(), RefundNotifyMessage.class);
-                    } catch (Exception e) {
-                        return null;
-                    }
-                })
-                .collect(Collectors.toList());
+        Suborder suborder = suborderMapper.selectById(refund.getSuborderId());
+        if (suborder == null) {
+            return RestResp.fail(400, "子订单不存在");
+        }
 
-        return RestResp.ok(messages);
+        String content = String.format("用户申请退款，退款金额：¥%s，原因：%s",
+                refund.getRefundAmount(), refund.getRefundReason());
+        String title = "新的退款申请";
+
+        refundNotifyService.notifyMerchantForApply(refund, suborder, content, title);
+        return RestResp.ok("已通知商家处理退款", null);
     }
 
     /**
-     * 清除通知列表（消除红点）
+     * 商家处理退款 → 通知用户
      */
-    @DeleteMapping("/clear")
-    public RestResp<Void> clear(@RequestParam String type) {
-        String userId = SecurityUtils.getId();
-        String key = String.format("notify:%s:%s:list", type.toLowerCase(), userId);
-        redisTemplate.delete(key);
-        return RestResp.ok("通知已清空", null);
+    @PostMapping("/handleRefund")
+    public RestResp<Void> notifyUserForHandle(
+            @RequestParam @NotBlank(message = "退款单ID不能为空") String refundId,
+            @RequestParam Boolean isAgree,
+            @RequestParam(required = false) String rejectReason) {
+
+        // ✅ 从数据库查询退款单
+        Refund refund = refundMapper.selectById(refundId);
+        if (refund == null) {
+            return RestResp.fail(400, "退款单不存在");
+        }
+
+        String content;
+        String title;
+        if (isAgree) {
+            content = String.format("您的退款申请已通过审核，退款金额 ¥%s 将在3-7个工作日内原路返回", refund.getRefundAmount());
+            title = "退款申请已通过";
+        } else {
+            content = String.format("您的退款申请已被拒绝，原因：%s", rejectReason);
+            title = "退款申请被拒绝";
+        }
+
+        refundNotifyService.notifyUserForHandle(refund, isAgree, rejectReason, content, title);
+        return RestResp.ok("已通知用户退款结果", null);
     }
 }

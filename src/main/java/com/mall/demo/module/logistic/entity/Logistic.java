@@ -40,6 +40,7 @@ public class Logistic {
     //收货人
     private String consignee;
     private String consigneeId;
+    private String consigneePhone;
     private String consigneeAddress;
     //收货时间
     private LocalDateTime consigneeTime;

@@ -3,6 +3,7 @@ package com.mall.demo.module.Refund.service;
 import cn.hutool.core.util.IdUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mall.demo.common.config.RabbitMQConfig;
+import com.mall.demo.common.redis.RedisService;
 import com.mall.demo.module.Refund.entity.Refund;
 import com.mall.demo.module.Refund.entity.RefundNotifyFallback;
 import com.mall.demo.module.Refund.entity.RefundNotifyMessage;
@@ -13,6 +14,7 @@ import com.mall.demo.module.messageRecord.mapper.MessageRecordMapper;
 import com.mall.demo.module.messageRecord.mapper.UserSessionMapper;
 import com.mall.demo.module.messageRecord.service.UserSessionService;
 import com.mall.demo.module.order.entity.Suborder;
+import com.mall.demo.module.order.mapper.SuborderMapper;
 import com.mall.demo.module.user.entity.User;
 import com.mall.demo.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +52,9 @@ public class RefundNotifyServiceImpl implements RefundNotifyService {
     private static final String SEPARATOR = "::";
 
 
+
+
+
     /**
      * 用户申请退款 → 通知商家
      */
@@ -58,21 +63,28 @@ public class RefundNotifyServiceImpl implements RefundNotifyService {
     public void notifyMerchantForApply(Refund refund, Suborder suborder, String content,String title) {
         log.info("通知商家退货退款申请，退货退款单ID：{}，商家ID：{}", refund.getRefundId(), refund.getMerchantId());
 
+        // ✅ 通过 suborder 获取 shopId（参数已传入，优先使用）
+        if (suborder == null) {
+            throw new RuntimeException("子订单不能为空");
+        }
+
+        String targetShopId = suborder.getShopId();
+        if (targetShopId == null || targetShopId.isEmpty()) {
+            throw new RuntimeException("子订单关联的店铺ID不能为空");
+        }
+
         // 生成雪花ID
         String notifyId = IdUtil.getSnowflakeNextIdStr();
-
-
 
         RefundNotifyMessage message = RefundNotifyMessage.builder()
                 .notifyId(notifyId)
                 .refundId(refund.getRefundId())
-                .targetUserId(refund.getMerchantId())
+                .targetUserId(targetShopId)
                 .targetUserType("MERCHANT")
                 .title(title)
                 .content(content)
                 .action("APPLY")
                 .pushStatus(0)
-                // 0-待推送
                 .retryCount(0)
                 .createTime(LocalDateTime.now())
                 .isRead(false)
@@ -93,6 +105,17 @@ public class RefundNotifyServiceImpl implements RefundNotifyService {
         // 5. 更新推送状态
         updatePushStatus(notifyId, wsSuccess);
     }
+
+// ... existing code ...
+
+
+
+
+
+
+
+
+
 
     /**
      * 商家处理退款 → 通知用户
@@ -183,35 +206,37 @@ public class RefundNotifyServiceImpl implements RefundNotifyService {
     /**
      * 存入消息表（MySQL - refund_notify_message 表    message_record 表保存）
      */
+    /**
+     * 存入消息表（MySQL - refund_notify_message 表    message_record 表保存）
+     */
     private void saveToMessageTable(RefundNotifyMessage message) {
         try {
             int result = refundNotifyMessageMapper.insert(message);
 
-
-            String fromId  = "[SYSTEM·REFUND·0001]";
-
-            String toId = "[" + message.getTargetUserId() + "]";
-
-            if (toId == null) {
+            String targetUserId = message.getTargetUserId();
+            if (targetUserId == null || targetUserId.isEmpty()) {
                 throw new IllegalArgumentException("目标用户ID不能为空");
             }
+
+            String fromId = "SYSTEM_REFUND";
+            String toId = targetUserId;
 
             List<String> ids = java.util.Arrays.asList(fromId, toId);
             ids.sort(String::compareTo);
             String sessionId = ids.get(0) + SEPARATOR + ids.get(1);
-              String systemName = "退款通知";
 
-
-
+            String systemName = "退款通知";
 
             // 保存到消息记录表（message_record）
             MessageRecord messageRecordEntity = new MessageRecord();
             messageRecordEntity.setMessageRecordId(message.getNotifyId());
             messageRecordEntity.setMessagePublisherType("REFUND");
             messageRecordEntity.setMessagePublisherId(message.getRefundId());
-            messageRecordEntity.setTargetUserId(message.getTargetUserId());
+            messageRecordEntity.setTargetUserId(targetUserId);
             messageRecordEntity.setTargetUserType(message.getTargetUserType());
             messageRecordEntity.setContent(message.getContent());
+            messageRecordEntity.setPushStatus(1);
+            messageRecordEntity.setRetryCount(0);
             messageRecordEntity.setIsRead(message.getIsRead());
             messageRecordEntity.setReadTime(message.getReadTime());
             messageRecordEntity.setCreateTime(message.getCreateTime());
@@ -219,19 +244,8 @@ public class RefundNotifyServiceImpl implements RefundNotifyService {
             messageRecordEntity.setSessionId(sessionId);
             messageRecordMapper.insert(messageRecordEntity);
 
-
-
-
-
-
-            //存入会话表:
-            //接收方ID,     发送方ID  消息内容     会话ID     对方昵称
-            userSessionService.upsertSession(message.getTargetUserId(), fromId, messageRecordEntity, sessionId, systemName,null);
-
-
-
-
-
+            // 只为真实用户创建会话，不创建系统侧的会话记录
+            userSessionService.updateOrCreate(targetUserId, sessionId, fromId, messageRecordEntity, systemName, null, false);
 
             if (result > 0) {
                 log.info("退款消息已存入 refund_notify_message 表，notifyId: {}", message.getNotifyId());
@@ -241,6 +255,8 @@ public class RefundNotifyServiceImpl implements RefundNotifyService {
             throw new RuntimeException("保存退款消息失败", e);
         }
     }
+
+// ... existing code ...
 
     /**
      * 更新推送状态

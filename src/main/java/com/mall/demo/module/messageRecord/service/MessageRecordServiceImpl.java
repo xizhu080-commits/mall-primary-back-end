@@ -29,6 +29,7 @@ import com.mall.demo.module.shop.entity.Shop;
 import com.mall.demo.module.shop.mapper.ShopMapper;
 import com.mall.demo.module.user.entity.User;
 import com.mall.demo.module.user.mapper.UserMapper;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import io.jsonwebtoken.lang.Arrays;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,14 +72,31 @@ public class MessageRecordServiceImpl implements MessageRecordService {
 * 标记消息为已读
 * */
     @Override
-    public void markAllAsRead(String sessionId) {
+    public void markAllAsRead(String sessionId ,String shopId) {
+        log.info("==============================================已经进入会话标记区域===============================================");
         String currentUserId = SecurityUtils.getId();
-        if (currentUserId == null) {
-          throw new BizException(ErrorCodeEnum.USER_NOT_EXIST.getCode(), ErrorCodeEnum.USER_NOT_EXIST.getMessage());
+        if (shopId != null) {
+            messageRecordMapper.markAllAsRead(sessionId, shopId);
+            userSessionMapper.clearUnreadCount(shopId, sessionId);
+
+            log.info("店铺ID{}:  标记会话为已读", shopId);
+
         }
-        // 调用示例
-        messageRecordMapper.markAllAsRead(sessionId, currentUserId);
-        userSessionMapper.clearUnreadCount(currentUserId, sessionId);
+        else if (currentUserId != null){
+
+            messageRecordMapper.markAllAsRead(sessionId, currentUserId);
+            userSessionMapper.clearUnreadCount(currentUserId, sessionId);
+            log.info("用户ID{}:  标记会话为已读", currentUserId);
+
+        }
+        else{
+            throw new BizException(ErrorCodeEnum.USER_NOT_EXIST.getCode(), ErrorCodeEnum.USER_NOT_EXIST.getMessage());
+        }
+
+
+
+
+
     }
 
 
@@ -91,12 +109,11 @@ public class MessageRecordServiceImpl implements MessageRecordService {
     public List<UserSession> getSessionIds(String shopId) {
         String currentUserId;
 
-        if (shopId != null){
+        if (shopId != null && !shopId.isEmpty()){
             currentUserId = shopId;
         }else {
             currentUserId = SecurityUtils.getId();
         }
-
 
 
 
@@ -365,9 +382,13 @@ public class MessageRecordServiceImpl implements MessageRecordService {
                     ? "/queue/merchantWeChatMessage"
                     : "/queue/userWeChatMessage";
 
+            // ✅ 关键修复：前端商家连接时用 shopId 作为 userId，所以这里也用 shopId 作为目标
+            // convertAndSendToUser 的第一个参数是 principal name，需要与前端连接时使用的 userId 一致
+            String targetUserId = messageRecord.getTargetUserId();
 
+            log.info("接收方ID=====================targetUserId:{}", targetUserId);
             websocket.convertAndSendToUser(
-                    messageRecord.getTargetUserId(),
+                    targetUserId,
                     destination,
                     messageRecord
             );
@@ -490,27 +511,21 @@ public class MessageRecordServiceImpl implements MessageRecordService {
                 throw new Exception("用户不存在");
             }
 
+            log.info("发送方id:{}", messageRecord.getMessagePublisherId());
+            log.info("接收方id:{}", messageRecord.getTargetUserId());
 
-
-            // 更新/创建会话表:   接收方id    对方id   消息内容     会话id     对方昵称   对方头像
-
+            // 更新/创建会话表: 一次调用同时更新发送方和接收方视角的会话
+            // 发送方视角：对方是接收方，显示接收方的名称和头像
+            // 接收方视角：对方是发送方，显示发送方的名称和头像
             userSessionService.upsertSession(
                     messageRecord.getMessagePublisherId(),
                     messageRecord.getTargetUserId(),
                     messageRecord,
                     messageRecord.getSessionId(),
-                    userNameA,
-                    userAvatarA
-            );
-
-
-            userSessionService.upsertSession(
-                    messageRecord.getTargetUserId(),
-                    messageRecord.getMessagePublisherId(),
-                    messageRecord,
-                    messageRecord.getSessionId(),
-                    userNameB,
-                    userAvatarB
+                    userNameA,   // 发送方视角下对方的名称（接收方名称）
+                    userAvatarA, // 发送方视角下对方的头像（接收方头像）
+                    userNameB,   // 接收方视角下对方的名称（发送方名称）
+                    userAvatarB  // 接收方视角下对方的头像（发送方头像）
             );
 
 

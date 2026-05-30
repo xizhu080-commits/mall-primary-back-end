@@ -235,16 +235,39 @@ public class UserServiceImpl implements UserService {
         log.info("用户{}登陆成功", dto.getPhone());
 
 
-//       生成token
+
+     // ... existing code ...
+        // 3. 删除该用户的旧 token（实现单点登录）
+        String oldTokenKey = "userToken:" + user.getUserId();
+        String oldToken = stringRedisTemplate.opsForValue().get(oldTokenKey);
+        if (oldToken != null) {
+            // 删除旧的 token -> userId 映射
+            stringRedisTemplate.delete("token:" + oldToken);
+            log.info("【缓存中心】删除用户 {} 的旧 token", user.getUserId());
+        }
+
+        // 生成token
         log.info("【用户中心】开始生成token...");
         String token = jwtUtils.generateToken(userId, "USER");
+
         // 6. 存 Redis（token）
+        // 存储 userToken:{userId} -> token 映射（用于单点登录）
+        stringRedisTemplate.opsForValue().set(
+                "userToken:" + user.getUserId(),
+                token,
+                7,
+                TimeUnit.DAYS
+        );
+
+        // 存储 token:{token} -> userId 映射（用于验证）
         stringRedisTemplate.opsForValue().set(
                 "token:" + token,
                 userId,
                 7,
                 TimeUnit.DAYS
         );
+// ... existing code ...
+
         log.info("【缓存中心】存储用户信息...");
         redisService.set("user:" + userId, JSON.toJSONString(user), 10);
 

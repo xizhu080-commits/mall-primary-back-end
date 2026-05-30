@@ -5,7 +5,8 @@ import lombok.Data;
 @Data
 public class CreateSessionRespDto {
 
-    private String currentUserId;
+    //shopid or userid
+    private String messagePublisherId;
 
     private String sessionId;
 

@@ -93,7 +93,7 @@ public class GetSuborderDetailRespDto {
      * 收货人姓名
      * */
     private String receiverName;
-
+    private String receiverPhone;
 
 
     /*
@@ -105,7 +105,8 @@ public class GetSuborderDetailRespDto {
     * 签收时间
     * */
     private LocalDateTime signTime;
-
+    private LocalDateTime deliveryTime;
+    private LocalDateTime shipperTime;
 
     //==================================================支付信息===============================================================
 

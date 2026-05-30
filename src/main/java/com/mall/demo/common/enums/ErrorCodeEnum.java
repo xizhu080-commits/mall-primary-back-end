@@ -91,9 +91,8 @@ public enum ErrorCodeEnum {
     PAYMENT_CLOSED(1005, "支付单已关闭"),
 
     //地址
-    ADDRESS_NOT_EXIST(2001, "地址不存在" );
-
-
+    ADDRESS_NOT_EXIST(2001, "地址不存在" ),
+    REFUND_NOT_EXIST(2002, "退款单不存在");
 
 
 

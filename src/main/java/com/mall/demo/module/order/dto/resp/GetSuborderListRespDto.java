@@ -6,14 +6,14 @@ import com.mall.demo.module.order.entity.Suborder;
 import lombok.Data;
 
 @Data
-public class GetSuborderListRespDto {
+public class GetSuborderListRespDto extends Suborder{
 
     /**
      * 获取订单列表响应 DTO
      */
 
 
-    private List<Suborder> suborderList;
+    private List<GetSuborderDetailRespDto> suborderList;
 
 
 }

@@ -3,8 +3,10 @@ package com.mall.demo.module.Refund.controller;
 import com.mall.demo.common.result.RestResp;
 import com.mall.demo.module.Refund.dto.req.ApplyRefundReqDto;
 import com.mall.demo.module.Refund.dto.req.HandleRefundReqDto;
+import com.mall.demo.module.Refund.dto.req.RefundDetailReqDto;
 import com.mall.demo.module.Refund.dto.resp.ApplyRefundRespDto;
 import com.mall.demo.module.Refund.dto.resp.HandleRefundRespDto;
+import com.mall.demo.module.Refund.dto.resp.RefundDetailRespDto;
 import com.mall.demo.module.Refund.service.RefundService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -41,4 +43,16 @@ public class RefundController {
         String msg = reqDto.getIsAgree() ? "已同意退款" : "已拒绝退款";
         return RestResp.ok(msg, resp);
     }
+
+
+    /*
+    * 查看退款详情
+    * */
+    @PostMapping("/detail")
+    public RestResp<RefundDetailRespDto> detail(@Valid @RequestBody RefundDetailReqDto reqDto) {
+        RefundDetailRespDto resp = refundService.getRefundDetail(reqDto);
+        return RestResp.ok("查询成功", resp);
+
+    }
+
 }

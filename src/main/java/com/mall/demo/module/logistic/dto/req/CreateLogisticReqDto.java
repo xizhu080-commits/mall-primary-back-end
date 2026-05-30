@@ -14,6 +14,7 @@ public class CreateLogisticReqDto {
     //收货人
     private String consignee;
     private String consigneeId;
+    private String consigneePhone;
     private String consigneeAddress;
 
     private String orderId;

@@ -3,6 +3,7 @@ package com.mall.demo.module.payment.service;
 import cn.hutool.core.util.IdUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mall.demo.common.config.RabbitMQConfig;
+import com.mall.demo.common.redis.RedisService;
 import com.mall.demo.module.messageRecord.entity.MessageRecord;
 import com.mall.demo.module.messageRecord.mapper.MessageRecordMapper;
 import com.mall.demo.module.messageRecord.service.UserSessionService;
@@ -42,27 +43,11 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
     private final ObjectMapper objectMapper;
     private final PaymentMapper paymentMapper;
 
-
+    private final RedisService redisService;
 
     private final UserSessionService userSessionService;
 
     private static final String SEPARATOR = "::";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -78,27 +63,47 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
     public void notifyMerchantForShip(String paymentId, String suborderId, String merchantId) {
         log.info("通知发货人发货，子订单ID：{}，支付单ID：{}", suborderId, paymentId);
 
-        Payment payment = paymentMapper.selectById(paymentId);
+        String paymentCacheKey = "payment:" + paymentId;
+        Payment payment = redisService.get(
+            paymentCacheKey,
+            Payment.class,
+            (key) -> {
+                log.info("缓存未命中，从数据库查询支付单，paymentId: {}", paymentId);
+                return paymentMapper.selectById(paymentId);
+            },
+            30
+        );
 
-        if (payment == null || payment.getStatus() != 1){
+        if (payment == null || payment.getStatus() != 1) {
             throw new RuntimeException("支付单不存在或请先支付");
         }
-        Suborder suborder = suborderMapper.selectById(suborderId);
-        if (suborder == null || suborder.getStatus() != 2){
+
+        String suborderCacheKey = "suborder:" + suborderId;
+        Suborder suborder = redisService.get(
+            suborderCacheKey,
+            Suborder.class,
+            (key) -> {
+                log.info("缓存未命中，从数据库查询子订单，suborderId: {}", suborderId);
+                return suborderMapper.selectById(suborderId);
+            },
+            30
+        );
+
+        if (suborder == null || suborder.getStatus() != 2) {
             throw new RuntimeException("子订单不存在或状态错误");
         }
 
-        String content = "子订单：" + suborderId + "已支付，请尽快发货";
-        // ✅ 手动生成雪花ID
-        String notifyId = IdUtil.getSnowflakeNextIdStr();
+        String targetShopId = suborder.getShopId();
 
+        String content = "子订单：" + suborderId + "已支付，请尽快发货";
+        String notifyId = IdUtil.getSnowflakeNextIdStr();
 
         PaymentNotifyMessage message = PaymentNotifyMessage.builder()
                 .notifyId(notifyId)
                 .orderId(payment.getOrderId())
                 .paymentId(paymentId)
                 .suborderId(suborderId)
-                .targetUserId(merchantId)
+                .targetUserId(targetShopId)
                 .targetUserType("MERCHANT")
                 .title("新的发货通知")
                 .content(content)
@@ -106,18 +111,67 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
                 .isRead(false)
                 .build();
 
-        // 4. 【重要】先存入 message 表（永久保存）
         saveToMessageTable(message);
 
-        // 5. WebSocket 推送（实时）
         boolean wsSuccess = sendWebSocket(message);
-        // RabbitMQ 兜底
+
         sendToMQ(message, RabbitMQConfig.PAYMENT_NOTIFY_EXCHANGE, RabbitMQConfig.PAYMENT_NOTIFY_ROUTING_KEY);
 
-        // Redis 存储商家站内信
         storeToRedis(message);
 
-        // 8. 更新 message 表的推送状态
+        updatePushStatus(notifyId, wsSuccess);
+    }
+
+
+
+    /*
+    * 通知用户--支付消息
+    * */
+    @Override
+    public void notifyUserForPayment(String paymentId, String userId, String orderId, String suborderId_JSON) {
+        log.info("通知用户 {} 支付成功，支付单ID：{}", userId, paymentId);
+
+        String paymentCacheKey = "payment:" + paymentId;
+        Payment payment = redisService.get(
+            paymentCacheKey,
+            Payment.class,
+            (key) -> {
+                log.info("缓存未命中，从数据库查询支付单，paymentId: {}", paymentId);
+                return paymentMapper.selectById(paymentId);
+            },
+            30
+        );
+
+        if (payment == null || payment.getStatus() != 1) {
+            throw new RuntimeException("支付单不存在或状态错误");
+        }
+
+        String content = "您的主订单：" + payment.getOrderId() + "已支付成功";
+
+        String notifyId = IdUtil.getSnowflakeNextIdStr();
+        PaymentNotifyMessage message = PaymentNotifyMessage.builder()
+                .notifyId(notifyId)
+                .paymentId(paymentId)
+                .orderId(orderId)
+                .suborderId(suborderId_JSON)
+                .targetUserId(userId)
+                .targetUserType("USER")
+                .title("新的支付通知--支付成功!")
+                .content(content)
+                .createTime(LocalDateTime.now())
+                .isRead(false)
+                .build();
+
+        saveToMessageTable(message);
+
+        boolean wsSuccess = sendWebSocket(message);
+
+        if (!wsSuccess) {
+            sendToMQ(message, RabbitMQConfig.PAYMENT_NOTIFY_EXCHANGE, RabbitMQConfig.PAYMENT_NOTIFY_ROUTING_KEY);
+        }
+
+        storeToRedis(message);
+
         updatePushStatus(notifyId, wsSuccess);
     }
 
@@ -125,57 +179,13 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
 
 
 
-    /*
-    * 通知用户--支付消息
-    * */
 
 
-    @Override
-    public void notifyUserForPayment( String paymentId,  String userId, String orderId, String suborderId_JSON) {
-        log.info("通知用户 {} 支付成功，支付单ID：{}", userId, paymentId);
-        Payment payment = paymentMapper.selectById(paymentId);
-        if (payment == null || payment.getStatus() != 1){
-            throw new RuntimeException("支付单不存在或状态错误");
-        }
 
 
-            // 1. 先持久化消息（与发货通知保持一致）
-
-            String content = "您的主订单：" + payment.getOrderId() + "已支付成功";
-
-            String notifyId = IdUtil.getSnowflakeNextIdStr();
-            PaymentNotifyMessage message = PaymentNotifyMessage.builder()
-                    .notifyId(notifyId)
-                    .paymentId(paymentId)
-                    .orderId(orderId)
-                    .suborderId(suborderId_JSON)
-                    .targetUserId(userId)
-                    .targetUserType("USER")
-                    .title("新的支付通知--支付成功!")
-                    .content(content)
-                    .createTime(LocalDateTime.now())
-                    .isRead(false)
-                    .build();
-
-            // 2. 保存到数据库（用户可在站内信查看历史）
-            saveToMessageTable(message);
-
-            // 3. WebSocket 实时推送
-          boolean wsSuccess = sendWebSocket(message);
-
-          // 4. MQ 兜底（用户离线时重新推送）
-          if (!wsSuccess) {
-              sendToMQ(message, RabbitMQConfig.PAYMENT_NOTIFY_EXCHANGE, RabbitMQConfig.PAYMENT_NOTIFY_ROUTING_KEY);
-          }
-
-          // 5. Redis 存储用户站内信
-            storeToRedis(message);
-
-          // 6. 持久化推送状态
-            updatePushStatus(notifyId, wsSuccess);
 
 
-    }
+
 
 
 
@@ -292,47 +302,41 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
     /**
      * 存入消息表（MySQL - payment_notify_message  - message_record, user_session）
      */
+      /**
+     * 存入消息表（MySQL - payment_notify_message  - message_record, user_session）
+     */
     private void saveToMessageTable(PaymentNotifyMessage message) {
         try {
             // 设置推送状态为待推送
             message.setPushStatus(0);
-            // 0-待推送
             message.setRetryCount(0);
 
             int result = paymentNotifyMessageMapper.insert(message);
 
-
-
-
-
-            String fromId  = "[SYSTEM·PAYMENT·0003]";
-
-            String toId = "[" + message.getTargetUserId() + "]";
-
-            if (toId == null) {
+            String targetUserId = message.getTargetUserId();
+            if (targetUserId == null || targetUserId.isEmpty()) {
                 throw new IllegalArgumentException("目标用户ID不能为空");
             }
+
+            String fromId = "SYSTEM_PAYMENT";
+            String toId = targetUserId;
 
             List<String> ids = java.util.Arrays.asList(fromId, toId);
             ids.sort(String::compareTo);
             String sessionId = ids.get(0) + SEPARATOR + ids.get(1);
+
             String systemName = "支付通知";
-
-
-
-
-
-
-
 
             // 保存到消息记录表（message_record）
             MessageRecord messageRecordEntity = new MessageRecord();
             messageRecordEntity.setMessageRecordId(message.getNotifyId());
             messageRecordEntity.setMessagePublisherType("PAYMENT");
             messageRecordEntity.setMessagePublisherId(message.getPaymentId());
-            messageRecordEntity.setTargetUserId(message.getTargetUserId());
+            messageRecordEntity.setTargetUserId(targetUserId);
             messageRecordEntity.setTargetUserType(message.getTargetUserType());
             messageRecordEntity.setContent(message.getContent());
+            messageRecordEntity.setPushStatus(1);
+            messageRecordEntity.setRetryCount(0);
             messageRecordEntity.setIsRead(message.getIsRead());
             messageRecordEntity.setReadTime(message.getReadTime());
             messageRecordEntity.setCreateTime(message.getCreateTime());
@@ -340,10 +344,8 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
             messageRecordEntity.setSessionId(sessionId);
             messageRecordMapper.insert(messageRecordEntity);
 
-            //存入会话表:
-            //接收方ID,     发送方ID  消息内容     会话ID     对方昵称
-            userSessionService.upsertSession(message.getTargetUserId(), fromId, messageRecordEntity, sessionId, systemName,null);
-
+            // 只为真实用户创建会话，不创建系统侧的会话记录
+            userSessionService.updateOrCreate(targetUserId, sessionId, fromId, messageRecordEntity, systemName, null, false);
 
             if (result > 0) {
                 log.info("消息已存入 payment_notify_message 表，notifyId: {}", message.getNotifyId());
@@ -354,30 +356,7 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
         }
     }
 
-    /**
-     * 更新推送状态
-     */
-/*
-    private void updatePushStatus(String notifyId, boolean success) {
-        try {
-            PaymentNotifyMessage message = PaymentNotifyMessage.builder()
-                    .notifyId(notifyId)
-                    .pushStatus(success ? 1 : 2)
-                    .retryCount(success ? 0 : 1)
-                    .build();
-            // 1-成功, 2-失败
-            if (!success) {
-                message.setRetryCount(1);
-            }
 
-            paymentNotifyMessageMapper.updateById(message);
-        } catch (Exception e) {
-            log.error("更新推送状态失败", e);
-        }
-    }
-*/
-
-// ... existing code ...
     /**
      * 更新推送状态
      */
@@ -395,7 +374,6 @@ public class PaymentNotifyMessageServiceImpl implements PaymentNotifyMessageServ
             log.error("更新推送状态失败", e);
         }
     }
-// ... existing code ...
 
         /* 终极兜底：存 fallback 表（MySQL - payment_notify_fallback）
             * 定时任务会扫描这张表，重试发送到 MQ
