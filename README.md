@@ -1,474 +1,606 @@
+可以，下面这个**直接复制到 `README.md`** 即可：
 
+````markdown
+# 🛒 Mall Primary Backend
 
-```markdown
-# 商城后端部署文档
+> 基于 Spring Boot 3 + MyBatis-Plus 构建的电商后端系统，涵盖用户认证、商品管理、订单交易、库存控制、优惠券、支付、消息队列等核心业务，并支持 Docker Compose 一键部署。
 
-## 项目简介
+## 📖 项目简介
 
-商城后端服务，基于 Spring Boot 3.4 + MySQL 8 + Redis + RabbitMQ 构建，使用 Docker Compose 一键部署。
+Mall Primary Backend 是一个基于 **Spring Boot 3 + MyBatis-Plus** 开发的电商后端项目，采用前后端分离架构。
+
+项目围绕完整的电商交易流程进行设计，主要包含：
+
+- 用户注册与登录
+- JWT 身份认证
+- 商品与 SKU 管理
+- 商品搜索与详情
+- 订单创建与管理
+- Redis 库存控制
+- 优惠券计算
+- 支付宝沙箱支付
+- 退款处理
+- Redis 缓存
+- RabbitMQ 异步消息
+- WebSocket 实时通知
+- Docker Compose 容器化部署
 
 ---
 
-## 目录结构
+## ✨ 核心功能
 
-```
+### 👤 用户与认证
+
+- 用户注册 / 登录
+- JWT 身份认证
+- Spring Security 权限控制
+- Token 鉴权
+- BCrypt 密码加密
+
+### 🛍️ 商品模块
+
+- 商品分类
+- SPU / SKU 管理
+- 商品上下架
+- 商品搜索
+- 商品详情
+- SKU 多规格展示
+- 商品库存管理
+
+### 📦 订单模块
+
+- 创建订单
+- 多商品订单
+- 订单预览
+- 订单金额计算
+- 优惠券计算
+- 订单状态管理
+- 订单详情查询
+- 订单取消
+- 退款处理
+
+### 🎟️ 优惠券模块
+
+支持：
+
+- 满减优惠
+- 折扣优惠
+- 使用门槛
+- 有效期控制
+- 优惠券叠加规则
+- 订单优惠金额计算
+- 优惠券状态管理
+
+### 💰 支付模块
+
+集成支付宝沙箱支付：
+
+- 创建支付订单
+- 生成支付二维码
+- 支付状态查询
+- 支付异步通知
+- RSA2 签名验证
+- 退款处理
+
+### 📦 库存模块
+
+- Redis 库存缓存
+- Redis Lua 原子扣减
+- 库存不足判断
+- 库存回滚
+- Redisson 分布式锁
+- 高并发场景下库存控制
+
+### 📨 消息队列
+
+基于 RabbitMQ 实现异步业务处理：
+
+- 消息生产与消费
+- Topic Exchange
+- 消费者并发处理
+- 消息确认
+- 消息重试
+- 异步业务解耦
+
+### 🔔 WebSocket
+
+基于 WebSocket 实现实时消息通知：
+
+- 用户支付结果通知
+- 商家支付结果通知
+- 实时业务消息推送
+
+---
+
+## 🧰 技术栈
+
+| 技术 | 版本 | 用途 |
+|---|---|---|
+| Java | 21 | 后端开发 |
+| Spring Boot | 3.4.0 | 核心开发框架 |
+| Spring Security | 6.x | 身份认证与授权 |
+| JWT | 0.12.6 | Token 身份认证 |
+| MyBatis-Plus | 3.5.7 | ORM / 数据访问 |
+| MySQL | 8.x | 关系型数据库 |
+| Redis | 7.x | 缓存、库存、分布式锁 |
+| RabbitMQ | 3.x | 异步消息 |
+| Redisson | 3.x | 分布式锁 |
+| WebSocket | - | 实时消息推送 |
+| SpringDoc | 2.x | API 文档 |
+| MapStruct | 1.5.3 | DTO / VO 转换 |
+| Hutool | 5.8.x | Java 工具类 |
+| Alipay SDK | - | 支付宝支付 |
+| Docker Compose | - | 容器化部署 |
+
+---
+
+## 🏗️ 项目结构
+
+```text
 mall-primary-back-end/
-├── compose.yaml           # 服务编排文件
-├── Dockerfile             # 镜像构建文件（多阶段构建）
-├── .env                   # 环境变量配置（本地，不提交）
-├── .env.example           # 环境变量模板（提交 Git）
+├── .mvn/
+│   └── wrapper/                 # Maven Wrapper
+│
+├── lib/                         # 本地依赖库
+│
 ├── sql/
-│   └── init.sql           # 数据库初始化脚本
-├── src/                   # 源码
-├── pom.xml                # Maven 依赖
-└── README.md              # 本文档
+│   └── init.sql                 # 数据库初始化脚本
+│
+├── src/
+│   ├── main/
+│   │   ├── java/                # Java 源代码
+│   │   └── resources/
+│   │       └── application.yml  # Spring Boot 配置
+│   │
+│   └── test/                    # 测试代码
+│
+├── .dockerignore                # Docker 构建忽略文件
+├── .env.example                 # 环境变量模板
+├── .gitattributes               # Git 属性配置
+├── .gitignore                   # Git 忽略配置
+├── DESIGN.md                    # 项目设计文档
+├── Dockerfile                   # Docker 镜像构建文件
+├── compose.yaml                 # Docker Compose 配置
+├── pom.xml                      # Maven 配置
+├── mvnw                         # Maven Wrapper
+├── mvnw.cmd                     # Windows Maven Wrapper
+└── README.md                    # 项目说明
 ```
 
 ---
 
-## 环境要求
+## 🔄 系统架构
 
-| 软件 | 版本要求 | 说明 |
-|---|---|---|
-| Docker Desktop | 20.10+ | Windows / Mac / Linux 均可 |
-| 内存 | 建议 8GB 以上 | 4 个容器同时运行 |
-| 磁盘 | 至少 5GB 空闲 | 镜像 + 数据卷 |
-
-> **Windows 用户**：需要安装 WSL2（Docker Desktop 会自动提示）
-> **Mac 用户（M1/M2）**：建议开启 Docker Desktop 设置中的 `Use Rosetta for x86/amd64 emulation`
-
----
-
-## 快速开始
-
-### 第 1 步：安装 Docker Desktop
-
-- **Windows / Mac**：https://www.docker.com/products/docker-desktop
-- **Linux**：`curl -fsSL https://get.docker.com | sh`
-
-安装后启动 Docker Desktop，确保系统托盘图标为绿色运行状态。
-
-### 第 2 步：配置镜像加速器（国内用户推荐）
-
-打开 Docker Desktop → Settings → Docker Engine，修改 JSON 配置：
-
-```json
-{
-  "registry-mirrors": [
-    "https://docker.m.daocloud.io",
-    "https://docker.1panel.live",
-    "https://hub.rat.dev"
-  ]
-}
-```
-
-点击 **Apply & Restart** 保存。
-
-### 第 3 步：配置环境变量
-
-```bash
-# 复制模板（首次部署）
-cp .env.example .env
-
-# 按需修改密码等配置
-```
-
-### 第 4 步：启动所有服务
-
-```bash
-docker compose up -d
-```
-
-首次启动会自动拉取镜像（约 1GB），耐心等待 5-15 分钟。
-
-### 第 5 步：等待服务就绪
-
-```bash
-docker compose ps
-```
-
-**4 个容器状态全部为 `Up` 或 `Up (healthy)` 即启动成功**：
-
-```
-NAME            IMAGE                           STATUS
-mall-backend    baizhou2026/mall-backend:latest Up
-mall-db         mysql:8.0                       Up (healthy)
-mall-rabbitmq   rabbitmq:3-management-alpine    Up (healthy)
-mall-redis      redis:alpine                    Up (healthy)
-```
-
-> **首次启动**：MySQL 会自动执行 `sql/init.sql` 初始化数据，大约需要 30-60 秒。期间 `mall-backend` 可能启动失败重启，属正常现象，等 `mall-db` 变为 `healthy` 后会自动恢复。
-
-### 第 6 步：验证部署
-
-浏览器访问：
-
-```
-http://localhost:8080/actuator/health
-```
-
-返回以下内容即部署成功：
-
-```json
-{"status":"UP"}
+```text
+                    ┌─────────────────┐
+                    │   Vue 3 前端    │
+                    └────────┬────────┘
+                             │
+                      HTTP / WebSocket
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │    Spring Boot API   │
+                  └──────────┬───────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+          ▼                  ▼                  ▼
+      ┌────────┐        ┌──────────┐       ┌───────────┐
+      │ MySQL  │        │  Redis   │       │ RabbitMQ  │
+      └────────┘        └──────────┘       └───────────┘
+          │                  │                  │
+          ▼                  ▼                  ▼
+       数据持久化          缓存/库存            异步消息
+                         /分布式锁
 ```
 
 ---
 
-## 服务访问地址
+# 🚀 快速开始
 
-| 服务 | 地址 | 凭据 |
-|---|---|---|
-| **后端应用** | http://localhost:8080 | 无 |
-| **健康检查** | http://localhost:8080/actuator/health | 无 |
-| **Swagger 接口文档** | http://localhost:8080/swagger-ui.html | 无 |
-| **RabbitMQ 管理界面** | http://localhost:15672 | guest / guest |
-| **MySQL** | localhost:3307 | mall / root |
-| **Redis** | localhost:6379 | 无密码 |
+## 1. 环境要求
 
-> **注意**：MySQL 映射到宿主机的 **3307** 端口（不是默认的 3306），避免与本地已有 MySQL 冲突。
+### 本地开发
+
+- JDK 21
+- Maven 3.x
+- MySQL 8.x
+- Redis 7.x
+- RabbitMQ 3.x
+
+### Docker 部署
+
+- Docker
+- Docker Compose
+
+使用 Docker Compose 部署时，可以直接通过容器运行 MySQL、Redis、RabbitMQ，无需在本机单独安装这些服务。
 
 ---
 
-## 常用命令
+## 2. 克隆项目
 
 ```bash
-# 查看所有容器状态
-docker compose ps
+git clone https://github.com/xizhu080-commits/mall-primary-back-end.git
 
-# 查看所有服务日志
-docker compose logs -f
-
-# 查看某个服务日志
-docker compose logs -f backend
-docker compose logs -f db
-docker compose logs -f redis
-docker compose logs -f rabbitmq
-
-# 停止所有服务（保留数据）
-docker compose stop
-
-# 启动所有服务
-docker compose start
-
-# 重启所有服务
-docker compose restart
-
-# 重启某个服务
-docker compose restart backend
-
-# 完全停止并删除容器、网络（数据保留）
-docker compose down
-
-# 完全停止并删除容器、网络、数据卷（⚠️ 数据清空）
-docker compose down -v
-
-# 拉取最新镜像
-docker compose pull
-
-# 更新后端到最新版本
-docker compose pull backend
-docker compose up -d backend
+cd mall-primary-back-end
 ```
 
 ---
 
-## 数据库操作
+## 3. 配置环境变量
 
-### 进入数据库命令行
+复制环境变量模板：
 
-```bash
-docker exec -it mall-db mysql -umall -proot mall
-```
+### Windows CMD
 
-### 查看所有表
-
-```bash
-docker exec -it mall-db mysql -umall -proot mall -e "SHOW TABLES;"
-```
-
-### 备份数据库
-
-```bash
-docker exec mall-db mysqldump -umall -proot mall > backup.sql
-```
-
-### 恢复数据库
-
-```bash
-docker exec -i mall-db mysql -umall -proot mall < backup.sql
-```
-
-### 使用外部客户端连接
-
-| 参数 | 值 |
-|---|---|
-| 主机 | localhost |
-| 端口 | **3307** |
-| 数据库 | mall |
-| 用户名 | mall |
-| 密码 | root |
-
-推荐工具：Navicat、DBeaver、DataGrip、MySQL Workbench
-
----
-
-## Redis 操作
-
-```bash
-# 进入 Redis 命令行
-docker exec -it mall-redis redis-cli
-
-# 查看所有 key
-docker exec -it mall-redis redis-cli KEYS "*"
-
-# 查看 Redis 信息
-docker exec -it mall-redis redis-cli INFO
-```
-
----
-
-## RabbitMQ 操作
-
-### 管理界面
-
-浏览器访问 http://localhost:15672
-
-- 用户名：`guest`
-- 密码：`guest`
-
-### 命令行
-
-```bash
-# 查看队列
-docker exec -it mall-rabbitmq rabbitmqctl list_queues
-
-# 查看交换机
-docker exec -it mall-rabbitmq rabbitmqctl list_exchanges
-
-# 查看连接
-docker exec -it mall-rabbitmq rabbitmqctl list_connections
-```
-
----
-
-## 自行构建镜像
-
-如果你修改了源码，需要重新构建并推送镜像：
-
-```bash
-# 多阶段构建（Maven 打包 + 镜像制作，一步完成）
-docker build -t baizhou2026/mall-backend:latest .
-
-# 推送到 Docker Hub
-docker push baizhou2026/mall-backend:latest
-```
-
-> Dockerfile 采用多阶段构建：第一阶段用 Maven 镜像打包，第二阶段只复制 JAR 到 JRE Alpine 精简镜像，最终镜像仅约 200MB。
-
----
-
-## 更新后端版本
-
-当后端有新版本发布时：
-
-```bash
-# 1. 拉取最新镜像
-docker compose pull backend
-
-# 2. 重启后端服务
-docker compose up -d backend
-
-# 3. 查看日志确认启动成功
-docker compose logs -f backend
-```
-
-看到以下日志说明更新成功：
-
-```
-Started MallPrimaryBackEndApplication in XX.XXX seconds
-```
-
----
-
-## 故障排查
-
-### 1. 后端启动失败
-
-```bash
-docker compose logs backend
-```
-
-**常见错误关键词及原因**：
-
-| 错误 | 原因 | 解决 |
-|---|---|---|
-| `Access denied for user` | 数据库密码不对 | 检查 `.env` 里的 `DB_PASSWORD` |
-| `Unknown database 'mall'` | 数据库未初始化 | 检查 `sql/init.sql` 是否存在，尝试 `docker compose down -v` 重新初始化 |
-| `Connection refused` | 依赖服务未就绪 | 等待 MySQL 变为 `healthy` 后重启 backend |
-| `Port 8080 already in use` | 端口被占用 | 修改 `compose.yaml` 里 backend 的端口映射 |
-
-### 2. MySQL 启动失败
-
-```bash
-docker compose logs db
-```
-
-**常见错误**：
-
-- `MYSQL_USER="root" ... cannot be used for the root user` → `.env` 里 `DB_USER` 不能是 `root`，改成 `mall`
-- `Port 3307 already in use` → 修改 `compose.yaml` 里 db 的端口映射
-
-### 3. 端口被占用
-
-**Windows**：
 ```cmd
-netstat -ano | findstr :8080
-taskkill /PID <PID> /F
+copy .env.example .env
 ```
 
-**Mac / Linux**：
-```bash
-lsof -i :8080
-kill -9 <PID>
+### PowerShell
+
+```powershell
+Copy-Item .env.example .env
 ```
 
-### 4. 磁盘空间不足
+### Linux / macOS
 
 ```bash
-# 查看 Docker 磁盘占用
-docker system df
-
-# 清理未使用的资源
-docker system prune -a
-
-# 清理未使用的数据卷（⚠️ 会删除数据）
-docker volume prune
+cp .env.example .env
 ```
 
-### 5. 完全重置（清空所有数据）
+然后根据本地环境修改 `.env`。
+
+> ⚠️ `.env` 用于本地真实配置，不要提交到 Git。
+
+---
+
+# 🐳 Docker Compose 部署
+
+## 1. 启动所有服务
 
 ```bash
-docker compose down -v
 docker compose up -d
 ```
 
-> ⚠️ 这会删除所有数据库数据，请先备份。
-
----
-
-## 配置文件说明
-
-### compose.yaml
-
-定义 4 个服务：`db`、`redis`、`rabbitmq`、`backend`，通过内部网络 `app-network` 互联。
-
-### .env / .env.example
-
-| 变量 | 说明 | 默认值 |
-|---|---|---|
-| `DB_ROOT_PASSWORD` | MySQL root 密码 | root |
-| `DB_DATABASE` | 数据库名 | mall |
-| `DB_USER` | 应用数据库用户 | mall |
-| `DB_PASSWORD` | 应用数据库密码 | root |
-| `RABBITMQ_USER` | RabbitMQ 用户 | guest |
-| `RABBITMQ_PASSWORD` | RabbitMQ 密码 | guest |
-| `RABBITMQ_VHOST` | RabbitMQ 虚拟主机 | / |
-
-> `.env.example` 提交到 Git 作为模板，`.env` 在 `.gitignore` 中忽略。
-
-### sql/init.sql
-
-数据库初始化脚本，包含所有表结构和初始数据。
-
-**注意**：`init.sql` 只在**首次启动**（数据卷为空时）执行。如需重新初始化：
+## 2. 查看服务状态
 
 ```bash
-docker compose down -v
-docker compose up -d
+docker compose ps
 ```
 
----
-
-## 生产环境建议
-
-1. **修改默认密码**：编辑 `.env`，设置强密码
-2. **关闭端口对外暴露**：删除 `db`、`redis`、`rabbitmq` 的 `ports` 映射，只保留内部访问
-3. **使用外部数据库**：将 `db` 换成云数据库（阿里云 RDS、腾讯云等）
-4. **配置 HTTPS**：在前面加 Nginx 反向代理
-5. **设置资源限制**：
-
-```yaml
-  backend:
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-```
-
-6. **配置日志轮转**：
-
-```yaml
-  backend:
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-```
-
----
-
-## 技术栈
-
-| 组件 | 版本 | 用途 |
-|---|---|---|
-| Spring Boot | 3.4.0 | 应用框架 |
-| Java | 21 | 运行环境 |
-| MySQL | 8.0 | 关系型数据库 |
-| Redis | 7 (alpine) | 缓存 / 分布式锁 |
-| RabbitMQ | 3.x (management-alpine) | 消息队列 |
-| MyBatis-Plus | 3.5.7 | ORM 框架 |
-| Spring Security | 6.x | 安全框架 |
-| Docker | 20.10+ | 容器化 |
-
----
-
-## 联系方式
-
-- **镜像地址**：https://hub.docker.com/r/baizhou2026/mall-backend
-- **拉取命令**：`docker pull baizhou2026/mall-backend:latest`
-
----
-
-## 许可
-
-仅供学习交流使用。
-
----
-
-**祝部署顺利！** 遇到问题先看日志：
+## 3. 查看日志
 
 ```bash
 docker compose logs -f
 ```
 
-90% 的问题日志里都能找到答案。
+查看后端日志：
+
+```bash
+docker compose logs -f backend
+```
+
+## 4. 停止服务
+
+```bash
+docker compose stop
+```
+
+## 5. 重启服务
+
+```bash
+docker compose restart
+```
+
+## 6. 停止并删除容器
+
+```bash
+docker compose down
+```
+
+## 7. 停止并删除容器及数据卷
+
+```bash
+docker compose down -v
+```
+
+> ⚠️ `docker compose down -v` 会删除 Docker Volume 中保存的数据，请谨慎使用。
+
+---
+
+## 🌐 服务地址
+
+| 服务 | 地址 |
+|---|---|
+| 后端 API | `http://localhost:8080` |
+| Swagger UI | `http://localhost:8080/swagger-ui.html` |
+| RabbitMQ 管理端 | `http://localhost:15672` |
+| MySQL | `localhost:3307` |
+| Redis | `localhost:6379` |
+
+RabbitMQ 默认管理账号：
+
+```text
+用户名：guest
+密码：guest
 ```
 
 ---
 
-### 优化点总结
+# 🗄️ 数据库
 
-| 改动 | 说明 |
-|------|------|
-| 目录结构 | 从 `mall-deploy/` 改为实际 `mall-primary-back-end/` |
-| 文件名 | `docker-compose.yml` → `compose.yaml` |
-| 命令 | `docker-compose` → `docker compose`（全局替换） |
-| 新增 `.env.example` | 添加模板说明，第 3 步引导用户复制 |
-| 新增 Dockerfile | 目录结构 + "自行构建镜像" 章节 |
-| 新增 Swagger 地址 | `http://localhost:8080/swagger-ui.html` |
-| 技术栈精简 | 去掉 Redisson 等冗余项，保持核心 |
+数据库初始化脚本：
 
-你可以直接复制上面的内容覆盖 `README.md`。
+```text
+sql/init.sql
+```
+
+首次启动 MySQL 容器时，会自动执行初始化 SQL。
+
+数据库信息根据 `.env` 配置为准。
+
+---
+
+# 🔴 Redis
+
+测试 Redis：
+
+```bash
+docker exec -it mall-redis redis-cli ping
+```
+
+正常情况下返回：
+
+```text
+PONG
+```
+
+进入 Redis：
+
+```bash
+docker exec -it mall-redis redis-cli
+```
+
+---
+
+# 📨 RabbitMQ
+
+RabbitMQ 管理后台：
+
+```text
+http://localhost:15672
+```
+
+查看队列：
+
+```bash
+docker exec -it mall-rabbitmq rabbitmqctl list_queues
+```
+
+查看交换机：
+
+```bash
+docker exec -it mall-rabbitmq rabbitmqctl list_exchanges
+```
+
+---
+
+# 🔨 本地开发
+
+如果不使用 Docker 运行后端，可以直接使用 Maven。
+
+### Windows
+
+```cmd
+mvnw.cmd spring-boot:run
+```
+
+### Linux / macOS
+
+```bash
+./mvnw spring-boot:run
+```
+
+或者先打包：
+
+```bash
+mvn clean package
+```
+
+然后运行：
+
+```bash
+java -jar target/mall-primary-back-end-0.0.1-SNAPSHOT.jar
+```
+
+---
+
+# 🐋 Docker 镜像
+
+项目提供 `Dockerfile`，可以单独构建后端镜像。
+
+构建：
+
+```bash
+docker build -t mall-backend:latest .
+```
+
+运行：
+
+```bash
+docker run -d \
+  --name mall-backend \
+  -p 8080:8080 \
+  mall-backend:latest
+```
+
+如果使用 Docker Compose，推荐直接：
+
+```bash
+docker compose up -d
+```
+
+---
+
+# 🔐 配置与安全
+
+项目涉及以下敏感配置：
+
+- 数据库密码
+- JWT Secret
+- 支付宝 App ID
+- 支付宝私钥
+- 支付宝公钥
+- 支付宝异步通知地址
+
+推荐使用环境变量进行配置：
+
+```text
+.env.example      # 示例配置，可以提交
+.env              # 真实配置，不提交
+```
+
+不要将真实密码、私钥、Token 或其他敏感信息提交到 GitHub。
+
+如果敏感信息已经提交到公开仓库，应及时更换对应密钥。
+
+---
+
+# 📚 API 文档
+
+项目集成 SpringDoc OpenAPI。
+
+启动项目后访问：
+
+```text
+http://localhost:8080/swagger-ui.html
+```
+
+可以查看和调试 RESTful API。
+
+---
+
+# 🧩 核心技术实现
+
+## JWT + Spring Security
+
+使用 JWT 完成用户身份认证，并结合 Spring Security 实现接口鉴权。
+
+## Redis
+
+Redis 主要用于：
+
+- 数据缓存
+- 商品库存
+- 缓存穿透防护
+- 缓存击穿防护
+- 分布式锁
+- Lua 原子操作
+
+## Redis Lua
+
+将库存检查和扣减操作放入 Lua 脚本中执行，保证库存操作的原子性，降低高并发场景下库存超卖风险。
+
+## Redisson
+
+使用 Redisson 实现分布式锁，控制高并发业务场景下的资源竞争。
+
+## RabbitMQ
+
+使用 RabbitMQ 实现异步消息处理和业务解耦。
+
+## WebSocket
+
+通过 WebSocket 向用户和商家实时推送支付结果等业务通知。
+
+## 支付宝沙箱
+
+集成支付宝沙箱环境，实现：
+
+- 支付订单创建
+- 支付二维码生成
+- 异步支付通知
+- 支付状态处理
+- RSA2 签名验证
+- 退款处理
+
+---
+
+# 🧪 测试
+
+运行测试：
+
+```bash
+mvn test
+```
+
+Windows：
+
+```cmd
+mvnw.cmd test
+```
+
+Linux / macOS：
+
+```bash
+./mvnw test
+```
+
+---
+
+# 📝 Git 提交规范
+
+推荐使用以下提交格式：
+
+```text
+feat: 新增功能
+fix: 修复问题
+refactor: 重构代码
+docs: 修改文档
+style: 代码格式调整
+test: 添加测试
+chore: 构建或工具配置修改
+```
+
+例如：
+
+```bash
+git add .
+
+git commit -m "feat: add coupon calculation"
+
+git push origin main
+```
+
+---
+
+# 🚧 项目状态
+
+项目处于持续开发阶段。
+
+当前主要功能：
+
+- [x] 用户认证
+- [x] JWT 登录鉴权
+- [x] 商品管理
+- [x] SKU 管理
+- [x] 商品搜索
+- [x] 商品详情
+- [x] 订单创建
+- [x] 订单管理
+- [x] Redis 库存扣减
+- [x] 优惠券
+- [x] 支付宝沙箱支付
+- [x] 退款
+- [x] RabbitMQ
+- [x] WebSocket
+- [x] Docker Compose
+
+---
+
+# 📄 License
+
+本项目仅用于学习、研究与技术交流。
+````
