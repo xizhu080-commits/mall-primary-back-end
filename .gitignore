@@ -1,8 +1,28 @@
 HELP.md
+HELP.md~
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+.claude
+
+lib/
+
+### Sensitive ###
+.env
+
+### Logs ###
+logs/
+*.log
+
+### Archives ###
+*.zip
+*.tar.gz
+
+### OS ###
+.DS_Store
+Thumbs.db
 
 ### STS ###
 .apt_generated

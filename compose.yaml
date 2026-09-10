@@ -1,0 +1,149 @@
+services:
+
+
+
+
+
+    # ============  数据库服务  ==============
+    db:
+      #拉取镜像
+      image: mysql:8.0
+      #容器起名
+      container_name: mall-db
+
+      #环境变量:
+      #数据库用户密码
+      #数据库名字
+      #数据库用户名
+      #数据库密码
+      environment:
+        MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+        MYSQL_DATABASE: ${DB_DATABASE}
+        MYSQL_USER: ${DB_USER}
+        MYSQL_PASSWORD: ${DB_PASSWORD}
+
+      ports:
+        - "3307:3306"
+
+      #数据卷:数据持久化,容器删除,数据依旧存在,用于存放重要数据
+      volumes:
+        - db_data:/var/lib/mysql
+
+      #健康检查
+      healthcheck:
+        test: ["CMD","mysqladmin","ping","-h","localhost"]
+        interval: 10s
+        timeout: 5s
+        retries: 5                          #啓動次數
+        start_period: 30s                   # ✅ 添加启动等待时间
+      restart: unless-stopped               # ✅ 添加自动重启
+      networks:
+        - app-network
+
+
+
+
+   # ========== 缓存服务 ==========
+    redis:
+      image: redis:alpine
+      container_name: mall-redis
+      ports:
+        - "6379:6379"                    # ✅ 添加端口映射
+      volumes:
+        - redis_data:/data               # ✅ 数据持久化
+      command: redis-server --appendonly yes  # ✅ 开启持久化
+      healthcheck: # ✅ 健康检查
+        test: [ "CMD", "redis-cli", "ping" ]
+        interval: 10s
+        timeout: 3s
+        retries: 3
+      restart: unless-stopped            # ✅ 自动重启
+      networks:
+        - app-network
+
+
+  # ========== RabbitMQ 消息队列 ==========
+    rabbitmq:
+      image: rabbitmq:3-management-alpine
+      container_name: mall-rabbitmq
+      ports:
+        - "5672:5672"         # AMQP 协议端口（后端应用连接）
+        - "15672:15672"       # 管理界面（浏览器访问 http://localhost:15672）
+      environment:
+        RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+        RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+        RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+      volumes:
+        - rabbitmq_data:/var/lib/rabbitmq
+      healthcheck:
+        test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 30s
+      restart: unless-stopped
+      networks:
+        - app-network
+
+
+    #=========== 后端服务 ==========
+    backend:
+      #后端目录
+      #build: .
+      image: baizhou2026/mall-backend:latest
+      #容器起名
+      container_name: mall-backend
+
+      ports:
+        - "8080:8080"                       # ✅ 添加端口映射
+
+      #环境变量
+      environment:
+
+        SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${DB_DATABASE}?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+        SPRING_DATASOURCE_USERNAME: ${DB_USER}
+        SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+
+        # Spring Boot 3.x 用这个（注意是 SPRING_DATA_REDIS_HOST）
+        SPRING_DATA_REDIS_HOST: redis
+        SPRING_DATA_REDIS_PORT: 6379
+
+
+
+        SPRING_RABBITMQ_HOST: rabbitmq           # 容器服務名（替代 localhost）
+        SPRING_RABBITMQ_PORT: 5672
+        SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+        SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+        SPRING_RABBITMQ_VIRTUAL_HOST: ${RABBITMQ_VHOST:-/}
+
+
+      #启动
+      depends_on:
+        #等待数据库健康
+        db:
+          condition: service_healthy
+
+        redis:
+          condition: service_started
+
+        rabbitmq: # ✅ 新增
+          condition: service_healthy
+
+      volumes:
+        - ./logs:/app/logs                  # ✅ 挂载日志
+      restart: unless-stopped               # ✅ 添加自动重启
+
+
+      networks:
+        - app-network
+
+
+volumes:
+  db_data:
+  redis_data:
+  rabbitmq_data:
+
+
+networks:
+  app-network:
+    driver: bridge
