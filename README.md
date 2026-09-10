@@ -1,4 +1,4 @@
-可以，下面这个**直接复制到 `README.md`** 即可：
+
 
 ````markdown
 # 🛒 Mall Primary Backend
