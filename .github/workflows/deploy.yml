@@ -2,7 +2,7 @@ name: Deploy to Aliyun Server
 
 on:
   workflow_run:
-    workflows: ["Java CI"] # 这里必须填你之前 CI 工作流的 name 名字
+    workflows: ["Java CI/CD"] # 这里必须填你之前 CI 工作流的 name 名字
     types:
       - completed
 
