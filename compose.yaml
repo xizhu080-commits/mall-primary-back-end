@@ -100,6 +100,9 @@ services:
       #环境变量
       environment:
 
+        SPRING_PROFILES_ACTIVE: docker
+
+
         SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${DB_DATABASE}?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
         SPRING_DATASOURCE_USERNAME: ${DB_USER}
         SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
@@ -124,13 +127,16 @@ services:
           condition: service_healthy
 
         redis:
-          condition: service_started
+          condition: service_healthy
 
         rabbitmq: # ✅ 新增
           condition: service_healthy
 
       volumes:
         - ./logs:/app/logs                  # ✅ 挂载日志
+
+
+
       restart: unless-stopped               # ✅ 添加自动重启
 
 

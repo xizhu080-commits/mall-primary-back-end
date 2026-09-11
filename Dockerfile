@@ -6,7 +6,7 @@
 # ============================================
 
 # 1. 基础镜像：包含 Maven 和 JDK 21
-FROM  maven:3.8-eclipse-temurin-21 AS builder
+FROM  maven:3.9.11-eclipse-temurin-21 AS builder
 
 
 # 2. 设置容器内的工作目录

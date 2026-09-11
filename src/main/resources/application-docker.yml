@@ -1,0 +1,23 @@
+# ============================================================
+# Docker 容器环境配置
+# 数据库/Redis/RabbitMQ 使用 Docker 服务名互相访问
+# ============================================================
+
+spring:
+  # --------------------------数据源配置--------------------------
+  datasource:
+    url: jdbc:mysql://db:3306/mall?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
+    username: mall
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # --------------------------Redis 配置--------------------------
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+  # --------------------------RabbitMQ 连接地址--------------------------
+  rabbitmq:
+    host: rabbitmq
+    port: 5672

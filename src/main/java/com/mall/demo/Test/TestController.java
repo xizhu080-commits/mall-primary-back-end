@@ -36,6 +36,23 @@ public class TestController {
     private final LogisticNotifyService logisticNotifyService;
     private final MessageRecordService messageRecordService;
 
+
+
+
+
+
+
+
+        @GetMapping("/hello")
+        public String test() { return "hello world, CI/CD 自动部署成功！"; }
+
+
+
+
+
+
+
+
     // ==================== 支付消息测试 ====================
 
     @GetMapping("/payment/user")

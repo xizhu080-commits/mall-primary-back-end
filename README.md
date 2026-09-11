@@ -1,6 +1,6 @@
 
+## 2026-9-11
 
-````markdown
 # 🛒 Mall Primary Backend
 
 > 基于 Spring Boot 3 + MyBatis-Plus 构建的电商后端系统，涵盖用户认证、商品管理、订单交易、库存控制、优惠券、支付、消息队列等核心业务，并支持 Docker Compose 一键部署。
