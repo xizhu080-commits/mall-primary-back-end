@@ -44,7 +44,9 @@ public class TestController {
 
 
         @GetMapping("/hello")
-        public String test() { return "hello world, CI/CD 自动部署成功！"; }
+        public String test() {
+            return "Hello World, CI/CD 自动部署成功！";
+        }
 
 
 
