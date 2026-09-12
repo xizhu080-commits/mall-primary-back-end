@@ -31,4 +31,10 @@ jobs:
             # --restart=always 表示如果服务器重启，容器也会自动启动
             # -p 8080:8080 表示将服务器的8080端口映射到容器的8080端口（请确认你的Java项目内部端口是8080）
                 #docker run -d --name mall-backend --restart=always --network mall-net -p 8080:8080 baizhou2026/mall-backend:latest
-                docker run -d --name mall-backend --restart=always --network mall-net -p 8080:8080 -m 512m -e JAVA_OPTS="-Xmx256m" baizhou2026/mall-backend:latest
+                #docker run -d --name mall-backend --restart=always --network mall-net -p 8080:8080 -m 512m -e JAVA_OPTS="-Xmx256m" baizhou2026/mall-backend:latest
+                docker run -d --name mall-backend --restart=always --network mall-net \
+                -p 8080:8080 -m 512m \
+                -e "SPRING_PROFILES_ACTIVE=docker" \
+                -e "JAVA_TOOL_OPTIONS=-Xmx256m" \
+                baizhou2026/mall-backend:latest
+
