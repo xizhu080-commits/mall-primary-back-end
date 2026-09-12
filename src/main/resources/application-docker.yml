@@ -21,3 +21,15 @@ spring:
   rabbitmq:
     host: rabbitmq
     port: 5672
+
+
+
+    # --------------------------Prometheus 配置--------------------------
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: health,info,prometheus
+      metrics:
+        tags:
+          application: mall-backend

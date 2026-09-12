@@ -1,0 +1,19 @@
+groups:
+  - name: mall-alerts
+    rules:
+      - alert: BackendDown
+        expr: up{job="mall-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mall-backend 挂了"
+          description: "backend 已 1 分钟不可达"
+
+      - alert: HighJvmHeap
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM 堆内存超过 85%"

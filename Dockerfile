@@ -41,7 +41,11 @@ COPY --from=builder /build/target/*.jar app.jar
 # 10. 暴露端口 8080
 EXPOSE 8080
 
-# 11. 容器启动时执行的命令
+# 11. 容器默认使用 docker profile（加载 application-docker.yml）
+#     运行时可用 -e SPRING_PROFILES_ACTIVE=prod 覆盖
+ENV SPRING_PROFILES_ACTIVE=docker
+
+# 12. 容器启动时执行的命令
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
 

@@ -210,6 +210,32 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+
+
+
+
+        <!-- - - - - - - - - - - - -  - - - - - - - - -    普罗米修斯  - - - - - - - - - -  - - - - - - - - -    -->
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+
+
+
+        <!-- - - - - - - - - - - - -  - - - - - - - - -    micrometer  - - - - - - - - - -  - - - - - - - - -    -->
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+
+
+
+
+
     </dependencies>
 
 

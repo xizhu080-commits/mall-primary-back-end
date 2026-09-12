@@ -144,10 +144,120 @@ services:
         - app-network
 
 
+
+
+
+  # ========== 监控指标 ==========
+    prometheus:
+      image: prom/prometheus:latest
+      container_name: mall-prometheus
+      ports:
+        - "9090:9090"
+      volumes:
+        - ./monitor/prometheus.yml:/etc/prometheus/prometheus.yml
+        - ./monitor/alert.rules.yml:/etc/prometheus/alert.rules.yml
+        - prom_data:/prometheus
+      command:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--storage.tsdb.retention.time=15d'
+      restart: unless-stopped
+      networks:
+        - app-network
+
+    grafana:
+      image: grafana/grafana:latest
+      container_name: mall-grafana
+      ports:
+        - "3000:3000"
+      environment:
+        GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+        GF_USERS_ALLOW_SIGN_UP: "false"
+      volumes:
+        - grafana_data:/var/lib/grafana
+      depends_on:
+        - prometheus
+      restart: unless-stopped
+      networks:
+        - app-network
+
+  # ========== 日志中心 ==========
+    elasticsearch:
+      image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+      container_name: mall-es
+      environment:
+        - discovery.type=single-node
+        - xpack.security.enabled=false
+        - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      ports:
+        - "9200:9200"
+      volumes:
+        - es_data:/usr/share/elasticsearch/data
+      healthcheck:
+        test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+        interval: 15s
+        timeout: 5s
+        retries: 10
+        start_period: 60s
+      restart: unless-stopped
+      networks:
+        - app-network
+
+    logstash:
+      image: docker.elastic.co/logstash/logstash:8.13.0
+      container_name: mall-logstash
+      volumes:
+        - ./monitor/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+        - ./logs:/app/logs:ro          # 直接读 backend 挂出来的日志
+      environment:
+        LS_JAVA_OPTS: "-Xms256m -Xmx256m"
+      depends_on:
+        elasticsearch:
+          condition: service_healthy
+      restart: unless-stopped
+      networks:
+        - app-network
+
+    kibana:
+      image: docker.elastic.co/kibana/kibana:8.13.0
+      container_name: mall-kibana
+      ports:
+        - "5601:5601"
+      environment:
+        ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      depends_on:
+        elasticsearch:
+          condition: service_healthy
+      restart: unless-stopped
+      networks:
+        - app-network
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 volumes:
   db_data:
   redis_data:
   rabbitmq_data:
+  prom_data:        # 新增
+  grafana_data:     # 新增
+  es_data:          # 新增
 
 
 networks:
