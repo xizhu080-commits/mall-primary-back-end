@@ -1,6 +1,3 @@
-
-## 2026-9-11
-
 # 🛒 Mall Primary Backend
 
 > 基于 Spring Boot 3 + MyBatis-Plus 构建的电商后端系统，涵盖用户认证、商品管理、订单交易、库存控制、优惠券、支付、消息队列等核心业务，并支持 Docker Compose 一键部署。
@@ -216,6 +213,10 @@ mall-primary-back-end/
 
 使用 Docker Compose 部署时，可以直接通过容器运行 MySQL、Redis、RabbitMQ，无需在本机单独安装这些服务。
 
+> 💡 **Windows / macOS 用户**：请先安装并启动 [Docker Desktop](https://www.docker.com/products/docker-desktop/)，否则 `docker` 命令无法连接守护进程。
+>
+> 💡 **Linux 用户**：确保 `dockerd` 已启动（`sudo systemctl start docker`）。
+
 ---
 
 ## 2. 克隆项目
@@ -228,7 +229,7 @@ cd mall-primary-back-end
 
 ---
 
-## 3. 配置环境变量
+## 3. 配置环境变量（⚠️ 必做）
 
 复制环境变量模板：
 
@@ -250,13 +251,39 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-然后根据本地环境修改 `.env`。
+然后根据本地环境修改 `.env`。**`.env` 文件至少需要包含以下变量**（具体以 `.env.example` 为准）：
 
-> ⚠️ `.env` 用于本地真实配置，不要提交到 Git。
+```env
+# ============ 数据库 ============
+DB_ROOT_PASSWORD=your_root_password
+DB_DATABASE=mall
+DB_USER=mall
+DB_PASSWORD=your_password
+
+# ============ RabbitMQ ============
+RABBITMQ_USER=guest
+RABBITMQ_PASSWORD=guest
+RABBITMQ_VHOST=/
+
+# ============ JWT ============
+JWT_SECRET=your_jwt_secret_at_least_32_chars
+
+# ============ 支付宝沙箱（可选） ============
+ALIPAY_APP_ID=
+ALIPAY_PRIVATE_KEY=
+ALIPAY_PUBLIC_KEY=
+ALIPAY_NOTIFY_URL=
+```
+
+> ⚠️ `.env` 用于本地真实配置，**不要提交到 Git**。
+>
+> ⚠️ **支付宝沙箱配置说明**：`ALIPAY_APP_ID`、`ALIPAY_PRIVATE_KEY`、`ALIPAY_PUBLIC_KEY`、`ALIPAY_NOTIFY_URL` 需要在 [支付宝开放平台沙箱](https://open.alipay.com/develop/sandbox/app) 自行申请后填入。如果不测试支付功能，可以暂时留空，但**支付相关接口会不可用**。
 
 ---
 
 # 🐳 Docker Compose 部署
+
+> 后端镜像已发布到 Docker Hub：**`baizhou2026/mall:latest`**，可直接 `docker compose up -d` 使用；如需自行构建，见下方「🐋 Docker 镜像」章节。
 
 ## 1. 启动所有服务
 
@@ -269,6 +296,8 @@ docker compose up -d
 ```bash
 docker compose ps
 ```
+
+正常情况下应看到 `mall-db`、`mall-redis`、`mall-rabbitmq`、`mall-backend` 四个容器，且 backend 状态为 `Up`。
 
 ## 3. 查看日志
 
@@ -310,22 +339,45 @@ docker compose down -v
 
 ---
 
+## ✅ 验证部署是否成功
+
+按以下步骤逐一确认：
+
+1. **后端健康检查**：访问 `http://localhost:8080/actuator/health`，应返回 `{"status":"UP"}`
+2. **Swagger UI**：访问 `http://localhost:8080/swagger-ui/index.html`（或 `http://localhost:8080/swagger-ui.html`），能看到接口列表
+3. **RabbitMQ 管理台**：访问 `http://localhost:15672`，用 `.env` 中配置的账号登录（默认 `guest/guest`）
+4. **Redis 连通性**：
+   ```bash
+   docker exec -it mall-redis redis-cli ping
+   ```
+   应返回 `PONG`
+5. **MySQL 连通性**：
+   ```bash
+   docker exec -it mall-db mysqladmin ping -h localhost
+   ```
+   应返回 `mysqld is alive`
+
+---
+
 ## 🌐 服务地址
 
 | 服务 | 地址 |
 |---|---|
 | 后端 API | `http://localhost:8080` |
-| Swagger UI | `http://localhost:8080/swagger-ui.html` |
+| 健康检查 | `http://localhost:8080/actuator/health` |
+| Swagger UI | `http://localhost:8080/swagger-ui/index.html` |
 | RabbitMQ 管理端 | `http://localhost:15672` |
 | MySQL | `localhost:3307` |
 | Redis | `localhost:6379` |
 
-RabbitMQ 默认管理账号：
+RabbitMQ 默认管理账号（以 `.env` 配置为准）：
 
 ```text
 用户名：guest
 密码：guest
 ```
+
+> ⚠️ **端口冲突提醒**：如果本机 `3307` / `6379` / `5672` / `15672` / `8080` 端口已被占用，请修改 `compose.yaml` 中的 `ports` 映射，或先停止本机对应服务。
 
 ---
 
@@ -337,9 +389,16 @@ RabbitMQ 默认管理账号：
 sql/init.sql
 ```
 
-首次启动 MySQL 容器时，会自动执行初始化 SQL。
+`sql/init.sql` 通过 volume 挂载到 MySQL 容器的 `/docker-entrypoint-initdb.d/` 目录，**仅在数据卷为空时首次启动执行**。
 
-数据库信息根据 `.env` 配置为准。
+如果修改了 `init.sql` 需要重新初始化，请先执行：
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
+数据库信息以 `.env` 配置为准。
 
 ---
 
@@ -387,9 +446,37 @@ docker exec -it mall-rabbitmq rabbitmqctl list_exchanges
 
 ---
 
-# 🔨 本地开发
+# 🔨 本地开发（IDEA 调试后端源码）
 
-如果不使用 Docker 运行后端，可以直接使用 Maven。
+> 💡 **重要**：如果你要在 IDEA 中调试后端源码，**推荐只启动依赖服务（db、redis、rabbitmq），不要启动 backend 容器**，否则 8080 端口会冲突。
+
+## 1. 只启动依赖服务
+
+```bash
+docker compose up -d db redis rabbitmq
+```
+
+## 2. 确认依赖服务健康
+
+```bash
+docker compose ps
+```
+
+确保 `mall-db`、`mall-redis`、`mall-rabbitmq` 状态为 `healthy` 或 `Up`。
+
+## 3. IDEA 中连接的地址
+
+| 服务 | 地址 |
+|---|---|
+| MySQL | `localhost:3307` |
+| Redis | `localhost:6379` |
+| RabbitMQ | `localhost:5672` |
+
+> ⚠️ 注意 MySQL 端口是 **3307**（不是默认的 3306），因为容器映射到了宿主机 3307。
+
+## 4. 运行项目
+
+在 IDEA 中直接运行主启动类，或使用 Maven：
 
 ### Windows
 
@@ -424,7 +511,7 @@ java -jar target/mall-primary-back-end-0.0.1-SNAPSHOT.jar
 构建：
 
 ```bash
-docker build -t mall-backend:latest .
+docker build -t baizhou2026/mall:latest .
 ```
 
 运行：
@@ -433,7 +520,7 @@ docker build -t mall-backend:latest .
 docker run -d \
   --name mall-backend \
   -p 8080:8080 \
-  mall-backend:latest
+  baizhou2026/mall:latest
 ```
 
 如果使用 Docker Compose，推荐直接：
@@ -475,7 +562,7 @@ docker compose up -d
 启动项目后访问：
 
 ```text
-http://localhost:8080/swagger-ui.html
+http://localhost:8080/swagger-ui/index.html
 ```
 
 可以查看和调试 RESTful API。
@@ -550,6 +637,45 @@ Linux / macOS：
 
 ---
 
+# ❓ 常见问题（FAQ）
+
+**Q1：`docker compose up -d` 后 backend 一直重启？**
+
+先看日志定位原因：
+
+```bash
+docker compose logs -f backend
+```
+
+常见原因：`.env` 未配置或变量为空、数据库未初始化完成、端口冲突。
+
+**Q2：端口被占用怎么办？**
+
+修改 `compose.yaml` 中对应服务的 `ports` 映射，例如把 `8080:8080` 改成 `8081:8080`。
+
+**Q3：支付接口报错 / 无法创建支付订单？**
+
+检查 `.env` 中的支付宝沙箱配置是否完整。未配置时支付相关接口不可用，其他功能不受影响。
+
+**Q4：数据库连不上 / 表不存在？**
+
+1. 确认 `mall-db` 容器状态健康：`docker compose ps`
+2. 确认 `sql/init.sql` 已执行：首次启动时才会执行，若数据卷已存在需 `docker compose down -v` 后重来
+3. 确认 `.env` 中的数据库名、用户名、密码与 `compose.yaml` 一致
+
+**Q5：IDEA 里跑后端，连不上 MySQL？**
+
+MySQL 映射到宿主机的是 **3307**，不是 3306。IDEA 配置里应写 `localhost:3307`。
+
+**Q6：如何完全重置环境？**
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
+---
+
 # 📝 Git 提交规范
 
 推荐使用以下提交格式：
@@ -603,4 +729,20 @@ git push origin main
 # 📄 License
 
 本项目仅用于学习、研究与技术交流。
-````
+
+---
+
+## 📌 本次修改要点
+
+| 修改项 | 说明 |
+|---|---|
+| Docker Hub 镜像名统一 | 全部改为 `baizhou2026/mall:latest` |
+| `.env` 关键变量说明 | 直接列出必须配置的变量，避免别人起不来 |
+| 支付宝沙箱配置提醒 | 明确说明未配置时支付接口不可用 |
+| IDEA 本地跑 vs Docker 全量跑 | 新增说明，只启动 db/redis/rabbitmq，不启动 backend |
+| 端口冲突提醒 | 在服务地址章节加警告 |
+| 数据库初始化机制 | 说明 volume 挂载 + 首次启动才执行 + 重置方式 |
+| Swagger UI 地址 | 改为 `swagger-ui/index.html`（如实际不同请按真实地址调整） |
+| 验证部署步骤 | 新增「✅ 验证部署是否成功」章节 |
+| FAQ 章节 | 新增 6 个常见问题 |
+| Docker Desktop 提醒 | 在环境要求里加 Windows/macOS/Linux 说明 |

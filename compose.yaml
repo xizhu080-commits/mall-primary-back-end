@@ -154,9 +154,14 @@ services:
       ports:
         - "9090:9090"
       volumes:
-        - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+        - ./monitor/prometheus.yml:/etc/prometheus/prometheus.yml
+        - ./monitor/alert.rules.yml:/etc/prometheus/alert.rules.yml   # ✅ 新增
         - prometheus_data:/prometheus
       restart: unless-stopped
+      networks:
+        - app-network
+
+
 
     grafana:
       image: grafana/grafana:latest
@@ -165,7 +170,13 @@ services:
         - "3000:3000"
       volumes:
         - grafana_data:/var/lib/grafana
+
+      depends_on:
+        - prometheus
       restart: unless-stopped
+
+      networks:
+        - app-network
 
 
     node-exporter:
@@ -174,6 +185,8 @@ services:
       ports:
         - "9100:9100"
       restart: unless-stopped
+      networks:
+        - app-network
 
   # ========== 日志中心 ==========
     elasticsearch:
@@ -184,7 +197,7 @@ services:
         - xpack.security.enabled=false
         - ES_JAVA_OPTS=-Xms512m -Xmx512m
       ports:
-        - "9200:9200"
+        - "9201:9200"
       volumes:
         - elasticsearch_data:/usr/share/elasticsearch/data
       healthcheck:
@@ -203,6 +216,7 @@ services:
       volumes:
         - ./monitor/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
         - ./logs:/app/logs:ro          # 直接读 backend 挂出来的日志
+        - logstash_data:/usr/share/logstash/data   # ✅ 新增
       environment:
         LS_JAVA_OPTS: "-Xms256m -Xmx256m"
       depends_on:
@@ -253,6 +267,7 @@ volumes:
   prometheus_data:        # 新增
   grafana_data:     # 新增
   elasticsearch_data:          # 新增
+  logstash_data:    # 新增
 
 
 networks:

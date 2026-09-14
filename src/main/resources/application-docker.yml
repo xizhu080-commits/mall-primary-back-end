@@ -7,8 +7,8 @@ spring:
   # --------------------------数据源配置--------------------------
   datasource:
     url: jdbc:mysql://db:3306/mall?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
-    username: mall
-    password: root
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   # --------------------------Redis 配置--------------------------
@@ -25,7 +25,7 @@ spring:
 
 
     # --------------------------Prometheus 配置--------------------------
-  management:
+management:
     endpoints:
       web:
         exposure:
