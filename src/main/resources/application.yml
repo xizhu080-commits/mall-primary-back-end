@@ -66,7 +66,7 @@ jwt:
   secret: 3rPX7RAsq2NXd0ZKvPIh1DKbWWe72RgkBojx8WxZPNw=
   expiration: 86400
 
-
+# --------------------------支付宝配置-------------------------
 alipay:
   sandbox:
     appId: 9021000162681200
@@ -75,3 +75,20 @@ alipay:
     gatewayUrl: https://openapi-sandbox.dl.alipaydev.com/gateway.do
     notifyUrl: "https://29cc939.r7.cpolar.top/api/pay/alipay/notify"  # 支付结果异步通知地址
     returnUrl: "http://localhost:8080/pay/success" # 支付完成后页面跳转地址
+
+
+
+  # --------------------------Prometheus 配置--------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+  endpoint:
+    health:
+      show-details: always
+
+  metrics:
+    tags:
+      application: mall-backend

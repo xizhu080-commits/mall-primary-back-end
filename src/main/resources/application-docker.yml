@@ -25,11 +25,16 @@ spring:
 
 
     # --------------------------Prometheus 配置--------------------------
-    management:
-      endpoints:
-        web:
-          exposure:
-            include: health,info,prometheus
-      metrics:
-        tags:
-          application: mall-backend
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health,info,metrics,prometheus
+
+    endpoint:
+      health:
+        show-details: always
+
+    metrics:
+      tags:
+        application: mall-backend
