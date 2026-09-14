@@ -186,7 +186,7 @@ services:
       ports:
         - "9200:9200"
       volumes:
-        - es_data:/usr/share/elasticsearch/data
+        - elasticsearch_data:/usr/share/elasticsearch/data
       healthcheck:
         test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
         interval: 15s
@@ -250,9 +250,9 @@ volumes:
   db_data:
   redis_data:
   rabbitmq_data:
-  prom_data:        # 新增
+  prometheus_data:        # 新增
   grafana_data:     # 新增
-  es_data:          # 新增
+  elasticsearch_data:          # 新增
 
 
 networks:
